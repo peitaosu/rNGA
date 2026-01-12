@@ -1,0 +1,38 @@
+[package]
+name = "rnga-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Command-Line Interface for NGA"
+license = "MIT"
+readme = "README.md"
+
+[[bin]]
+name = "rnga"
+path = "src/main.rs"
+
+[dependencies]
+# NGA client library
+rnga = { path = "../rNGA" }
+
+# CLI framework
+clap = { version = "4", features = ["derive", "env"] }
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# Output formatting
+comfy-table = "7"
+colored = "2"
+serde_json = "1"
+
+# Config management
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+# Error handling
+anyhow = "1"
+
+# Date formatting
+chrono = "0.4"
+futures = "0.3.31"
+

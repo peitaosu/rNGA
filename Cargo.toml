@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    "rNGA",
+    "rNGA-CLI",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/peitaosu/rNGA"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+
