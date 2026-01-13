@@ -2,7 +2,7 @@
 name = "rnga-cli"
 version = "0.1.0"
 edition = "2021"
-description = "Command-Line Interface for NGA"
+description = "Command-Line Interface and MCP Server for NGA"
 license = "MIT"
 readme = "README.md"
 
@@ -18,7 +18,7 @@ rnga = { path = "../rNGA" }
 clap = { version = "4", features = ["derive", "env"] }
 
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
 
 # Output formatting
 comfy-table = "7"
@@ -31,8 +31,15 @@ toml = "0.8"
 
 # Error handling
 anyhow = "1"
+thiserror = "2"
 
 # Date formatting
 chrono = "0.4"
 futures = "0.3.31"
+
+# MCP Server
+rmcp = { version = "0.12", features = ["server", "transport-io", "macros"] }
+schemars = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

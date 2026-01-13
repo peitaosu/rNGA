@@ -1,16 +1,17 @@
-//! NGA CLI.
+//! NGA CLI and MCP Server.
 
 mod commands;
 mod config;
+mod mcp;
 mod output;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use commands::{forum, message, notification, post, topic, user};
 
-/// NGA Forum CLI
+/// NGA Forum CLI and MCP Server
 #[derive(Parser)]
-#[command(name = "nga")]
+#[command(name = "rnga")]
 #[command(version, about, long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
@@ -23,7 +24,11 @@ struct Cli {
     verbose: bool,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
+
+    /// Run as MCP Server
+    #[arg(long)]
+    mcp: bool,
 }
 
 #[derive(Subcommand)]
@@ -101,7 +106,23 @@ enum AuthAction {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command {
+    if cli.mcp {
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::from_default_env()
+                    .add_directive(tracing::Level::INFO.into()),
+            )
+            .with_writer(std::io::stderr)
+            .init();
+
+        return mcp::run_server().await;
+    }
+
+    let command = cli.command.ok_or_else(|| {
+        anyhow::anyhow!("No command provided. Use --help for usage or --mcp to run as MCP server.")
+    })?;
+
+    match command {
         Commands::Auth { action } => handle_auth(action).await,
         Commands::Forum { action } => forum::handle(action, cli.format, cli.verbose).await,
         Commands::Topic { action } => topic::handle(action, cli.format, cli.verbose).await,

@@ -11,14 +11,6 @@ This repository contains a Rust workspace with two crates:
 | [`rNGA`](./rNGA) | Core client library for NGA API |
 | [`rNGA-CLI`](./rNGA-CLI) | Command-line interface for NGA |
 
-## Features
-
-- **Pure Rust** - No FFI, protocol buffers, or external dependencies for core functionality
-- **Async/Await** - Built on tokio for efficient async operations
-- **Type-Safe** - Strong typing for IDs, enums, and API responses
-- **Builder APIs** - Fluent interfaces for complex operations
-- **Pluggable Cache** - Trait-based caching abstraction
-
 ## Quick Start
 
 ### Library Usage

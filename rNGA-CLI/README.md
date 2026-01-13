@@ -1,6 +1,6 @@
 # rNGA-CLI
 
-Command-line interface for NGA forum, built with the `rnga` library.
+Command-line interface and MCP server for NGA forum, built with the `rnga` library.
 
 ## Installation
 
@@ -23,7 +23,14 @@ Before using commands that require login, authenticate first:
 
 ```bash
 # Login with your NGA token and user ID
-rrnga auth login --token YOUR_TOKEN --uid YOUR_UID
+rnga auth login --token YOUR_TOKEN --uid YOUR_UID
+
+# Steps to get NGA Token and UID 
+# 1. Login to https://nga.178.com/
+# 2. Right Click -> Inspect (F12) to open Developer Tools
+# 3. Application -> Storage -> Cookies
+# ngaPassportUid = UID
+# ngaPassportCid = Token
 
 # Check auth status
 rnga auth status
@@ -243,6 +250,58 @@ View current config location:
 ```bash
 rnga config
 ```
+
+## MCP Server
+
+rNGA-CLI can run as a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server, allowing AI assistants like Claude, Cursor, and others to interact with NGA forum.
+
+### Running as MCP Server
+
+```bash
+# Start MCP server over stdio
+rnga --mcp
+```
+
+### Available Tools
+
+The MCP server exposes the following tools:
+
+| Tool | Description | Auth Required |
+|------|-------------|---------------|
+| `forum_list` | List all forum categories and forums | No |
+| `forum_search` | Search forums by name | No |
+| `topic_list` | List topics in a forum | No |
+| `topic_read` | Read a topic with its posts | No |
+| `topic_search` | Search topics in a forum | No |
+| `user_get` | Get user profile by ID | No |
+| `user_by_name` | Get user profile by username | No |
+| `post_reply` | Reply to a topic | Yes |
+| `notification_counts` | Get unread notification counts | Yes |
+
+### IDE Configurations
+
+Add to your Cursor MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "rnga": {
+      "command": "/path/to/rnga",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+### Authentication for MCP
+
+The MCP server uses the same authentication as the CLI. Login via CLI first:
+
+```bash
+rnga auth login --token YOUR_TOKEN --uid YOUR_UID
+```
+
+The credentials are stored in `rnga.toml` and shared between CLI and MCP server.
 
 ## Examples
 
