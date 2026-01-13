@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 # NGA client library
-rnga = { path = "../rNGA" }
+rnga = { version = "0.1.0", path = "../rNGA" }
 
 # CLI framework
 clap = { version = "4", features = ["derive", "env"] }
