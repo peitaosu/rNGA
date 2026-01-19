@@ -227,6 +227,25 @@ rnga forum list --format json
 rnga forum list --format plain
 ```
 
+## Language
+
+Output language can be changed using `--lang` or `-l`:
+
+```bash
+# English (default)
+rnga --lang en topic list 7
+
+# Simplified Chinese
+rnga --lang zh-CN topic list 7
+
+# Short form
+rnga -l zh-CN auth status
+```
+
+Supported languages:
+- `en` - English (default)
+- `zh-CN` - Simplified Chinese (简体中文)
+
 ## Aliases
 
 Short aliases are available for common commands:

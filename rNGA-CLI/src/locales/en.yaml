@@ -1,0 +1,105 @@
+# English translations for rNGA CLI
+
+# General
+no_results: "No results"
+no_command: "No command provided. Use --help for usage or --mcp to run as MCP server."
+
+# Authentication
+logged_in_as: "Logged in as user %{uid}"
+logged_out: "Logged out"
+not_logged_in: "Not logged in"
+config_file: "Config file: %{path}"
+authenticated: "Authenticated: %{status}"
+user_id: "User ID: %{uid}"
+
+# Time formatting
+time_ago_seconds: "%{count}s ago"
+time_ago_minutes: "%{m}m %{s}s ago"
+time_ago_hours: "%{h}h %{m}m %{s}s ago"
+time_ago_days: "%{d}d %{h}h %{m}m %{s}s ago"
+
+# Time units for recent
+second: "second"
+seconds: "seconds"
+minute: "minute"
+minutes: "minutes"
+hour: "hour"
+hours: "hours"
+day: "day"
+days: "days"
+week: "week"
+month: "month"
+year: "year"
+
+# Topic commands
+forum_pages_range: "%{name} (pages %{start}-%{end}/%{total})"
+forum_page_single: "%{name} (page %{page}/%{total})"
+topic_tags: "Tags: %{tags}"
+topic_by_author: "By %{author} | %{date} | %{replies} replies"
+topic_fetched_all_pages: "Fetched all %{total} pages"
+topic_page_info: "Page %{page}/%{total}"
+search_results_for: "Search results for '%{keyword}' (page %{page}/%{total})"
+favorite_topics: "Favorite topics (page %{page}/%{total})"
+added_topic_to_favorites: "Added topic %{id} to favorites"
+removed_topic_from_favorites: "Removed topic %{id} from favorites"
+recent_content_header: "%{forum} - Recent %{content_type} in the last %{range}"
+recent_topics_type: "topics"
+recent_posts_type: "posts"
+no_topics_in_range: "No topics found in the specified time range"
+no_posts_in_range: "No posts found in the specified time range"
+found_recent_posts: "Found %{count} recent post"
+found_recent_posts_plural: "Found %{count} recent posts"
+
+# User commands
+no_users_found: "No users found"
+topics_by_user: "Topics by user %{uid} (page %{page}/%{total})"
+posts_by_user: "Posts by user %{uid} (page %{page}/%{total})"
+
+# Forum commands
+added_forum_to_favorites: "Added forum %{id} to favorites"
+removed_forum_from_favorites: "Removed forum %{id} from favorites"
+
+# Message commands
+conversations: "Conversations (page %{page}/%{total})"
+conversation_with: "Conversation with %{user} (page %{page}/%{total})"
+message_sent_to: "Message sent to %{user}"
+reply_sent: "Reply sent"
+
+# Notification commands
+total_unread: "Total unread: %{count}"
+notifications_list: "%{kind} notifications (page %{page}/%{total})"
+marked_notification_read: "Marked notification %{id} as read"
+marked_all_notifications_read: "Marked all %{kind} notifications as read"
+
+# Post commands
+upvoted_post: "Upvoted post %{id}. Score: %{up} up, %{down} down"
+downvoted_post: "Downvoted post %{id}. Score: %{up} up, %{down} down"
+no_hot_replies: "No hot replies"
+hot_replies_count: "%{count} hot replies"
+no_comments: "No comments"
+comments_page: "Comments (page %{page}/%{total})"
+posted_reply: "Posted reply (post ID: %{id})"
+posted_comment: "Posted comment"
+
+# Plain print labels
+topic_label: "[Topic %{id}]"
+by_label: "By %{author}"
+replies_label: "%{count} replies"
+uid_label: "[UID: %{id}]"
+score_label: "(score: %{score})"
+rep_label: "Rep: %{rep}"
+posts_label: "Posts: %{posts}"
+registered_label: "Registered: %{date}"
+in_topic: "in topic %{id}"
+topics_count: "(%{count} topics)"
+forums_count: "(%{count} forums)"
+from_user: "from %{user}"
+you_label: "You"
+
+# Notification types
+notif_replies: "Replies"
+notif_quotes: "Quotes"
+notif_mentions: "Mentions"
+notif_comments: "Comments"
+notif_system: "System"
+notif_messages: "Messages"

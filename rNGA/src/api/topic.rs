@@ -70,15 +70,18 @@ impl TopicApi {
 
     /// Get favorite folders.
     pub async fn favorite_folders(&self) -> Result<Vec<FavoriteFolder>> {
-        let xml = self.client.post_authed(
-            "nuke.php",
-            &[
-                ("__lib", "topic_favor_v2"),
-                ("__act", "list_folder"),
-                ("page", "1"),
-            ],
-            &[],
-        ).await?;
+        let xml = self
+            .client
+            .post_authed(
+                "nuke.php",
+                &[
+                    ("__lib", "topic_favor_v2"),
+                    ("__act", "list_folder"),
+                    ("page", "1"),
+                ],
+                &[],
+            )
+            .await?;
 
         let doc = XmlDocument::parse(&xml)?;
         let mut folders = Vec::new();
@@ -89,7 +92,8 @@ impl TopicApi {
                 folders.push(FavoriteFolder {
                     id: id.clone(),
                     name: attrs.get("name").cloned().unwrap_or_default(),
-                    count: attrs.get("length")
+                    count: attrs
+                        .get("length")
                         .and_then(|s| s.parse().ok())
                         .unwrap_or(0),
                 });
@@ -111,11 +115,13 @@ impl TopicApi {
             FavoriteTopicOp::Remove => ("del", "tidarray"),
         };
 
-        self.client.post_authed(
-            "nuke.php",
-            &[("__lib", "topic_favor_v2"), ("__act", act)],
-            &[(tid_key, topic_id.as_ref()), ("folder", folder_id.as_ref())],
-        ).await?;
+        self.client
+            .post_authed(
+                "nuke.php",
+                &[("__lib", "topic_favor_v2"), ("__act", act)],
+                &[(tid_key, topic_id.as_ref()), ("folder", folder_id.as_ref())],
+            )
+            .await?;
 
         Ok(())
     }
@@ -123,11 +129,14 @@ impl TopicApi {
     /// Get topics posted by a specific user.
     pub async fn by_user(&self, user_id: impl AsRef<str>, page: u32) -> Result<TopicListResult> {
         let page_str = page.to_string();
-        let xml = self.client.post(
-            "thread.php",
-            &[("authorid", user_id.as_ref()), ("page", &page_str)],
-            &[],
-        ).await?;
+        let xml = self
+            .client
+            .post(
+                "thread.php",
+                &[("authorid", user_id.as_ref()), ("page", &page_str)],
+                &[],
+            )
+            .await?;
 
         parse_topic_list_response(&xml)
     }
@@ -166,16 +175,19 @@ impl TopicListBuilder {
         let page_str = self.page.to_string();
         let recommend_str = if self.recommended_only { "1" } else { "" };
 
-        let xml = self.client.post(
-            "thread.php",
-            &[
-                (self.forum_id.param_name(), self.forum_id.id()),
-                ("page", &page_str),
-                ("order_by", self.order.param()),
-                ("recommend", recommend_str),
-            ],
-            &[],
-        ).await?;
+        let xml = self
+            .client
+            .post(
+                "thread.php",
+                &[
+                    (self.forum_id.param_name(), self.forum_id.id()),
+                    ("page", &page_str),
+                    ("order_by", self.order.param()),
+                    ("recommend", recommend_str),
+                ],
+                &[],
+            )
+            .await?;
 
         let mut result = parse_topic_list_response(&xml)?;
 
@@ -269,18 +281,21 @@ impl TopicDetailsBuilder {
         let page_str = self.page.to_string();
         let opt = if self.anonymous_only { "512" } else { "" };
 
-        let xml = self.client.post(
-            "read.php",
-            &[
-                ("tid", self.topic_id.as_str()),
-                ("page", &page_str),
-                ("fav", self.fav.as_deref().unwrap_or("")),
-                ("pid", self.post_id.as_deref().unwrap_or("")),
-                ("authorid", self.author_id.as_deref().unwrap_or("")),
-                ("opt", opt),
-            ],
-            &[],
-        ).await?;
+        let xml = self
+            .client
+            .post(
+                "read.php",
+                &[
+                    ("tid", self.topic_id.as_str()),
+                    ("page", &page_str),
+                    ("fav", self.fav.as_deref().unwrap_or("")),
+                    ("pid", self.post_id.as_deref().unwrap_or("")),
+                    ("authorid", self.author_id.as_deref().unwrap_or("")),
+                    ("opt", opt),
+                ],
+                &[],
+            )
+            .await?;
 
         parse_topic_details_response(&xml, self.page)
     }
@@ -343,17 +358,20 @@ impl TopicSearchBuilder {
         let content_str = if self.search_content { "1" } else { "" };
         let recommend_str = if self.recommended_only { "1" } else { "" };
 
-        let xml = self.client.post(
-            "thread.php",
-            &[
-                (self.forum_id.param_name(), self.forum_id.id()),
-                ("key", &self.keyword),
-                ("page", &page_str),
-                ("content", content_str),
-                ("recommend", recommend_str),
-            ],
-            &[],
-        ).await?;
+        let xml = self
+            .client
+            .post(
+                "thread.php",
+                &[
+                    (self.forum_id.param_name(), self.forum_id.id()),
+                    ("key", &self.keyword),
+                    ("page", &page_str),
+                    ("content", content_str),
+                    ("recommend", recommend_str),
+                ],
+                &[],
+            )
+            .await?;
 
         parse_topic_list_response(&xml)
     }
@@ -384,19 +402,14 @@ impl FavoriteTopicsBuilder {
         let page_str = self.page.to_string();
         let folder = self.folder_id.as_deref().unwrap_or("");
 
-        let xml = self.client.post_authed(
-            "thread.php",
-            &[("favor", folder), ("page", &page_str)],
-            &[],
-        ).await?;
+        let xml = self
+            .client
+            .post_authed("thread.php", &[("favor", folder), ("page", &page_str)], &[])
+            .await?;
 
         parse_topic_list_response(&xml)
     }
 }
-
-// ============================================================================
-// Parsing helpers
-// ============================================================================
 
 fn parse_topic_list_response(xml: &str) -> Result<TopicListResult> {
     let doc = XmlDocument::parse(xml)?;
@@ -429,7 +442,8 @@ fn parse_topic_details_response(xml: &str, page: u32) -> Result<TopicDetailsResu
         }
     }
 
-    let topic = doc.select_one("/root/__T")?
+    let topic = doc
+        .select_one("/root/__T")?
         .and_then(|n| parse_topic(&n).ok().flatten())
         .ok_or_else(|| Error::missing("topic"))?;
 
@@ -440,7 +454,8 @@ fn parse_topic_details_response(xml: &str, page: u32) -> Result<TopicDetailsResu
         }
     }
 
-    let forum_name = doc.string_opt("/root/__F/name")
+    let forum_name = doc
+        .string_opt("/root/__F/name")
         .or_else(|| doc.string_opt("/root/__F"))
         .unwrap_or_default();
 
@@ -458,7 +473,8 @@ fn parse_topic_details_response(xml: &str, page: u32) -> Result<TopicDetailsResu
 fn parse_topic(node: &crate::parser::XmlNode<'_>) -> Result<Option<Topic>> {
     let attrs = node.attrs();
 
-    let id = match attrs.get("quote_from")
+    let id = match attrs
+        .get("quote_from")
         .filter(|s| !s.is_empty() && *s != "0")
         .or_else(|| attrs.get("tid"))
         .cloned()
@@ -473,22 +489,22 @@ fn parse_topic(node: &crate::parser::XmlNode<'_>) -> Result<Option<Topic>> {
 
     let author = User {
         id: attrs.get("authorid").cloned().unwrap_or_default().into(),
-        name: attrs.get("author")
+        name: attrs
+            .get("author")
             .map(|s| UserName::parse(s))
             .unwrap_or_default(),
         ..Default::default()
     };
 
-    let typ: u64 = attrs.get("type")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
+    let typ: u64 = attrs.get("type").and_then(|s| s.parse().ok()).unwrap_or(0);
 
     let is_locked = typ & 0x10 != 0;
     let is_bold = typ & 0x20 != 0;
     let is_assembly = typ & 0x4000 != 0;
     let is_topped = typ & 0x400 != 0;
 
-    let forum_id = attrs.get("fid")
+    let forum_id = attrs
+        .get("fid")
         .filter(|s| !s.is_empty() && *s != "0")
         .map(|s| ForumIdKind::fid(s.clone()));
 
@@ -497,20 +513,33 @@ fn parse_topic(node: &crate::parser::XmlNode<'_>) -> Result<Option<Topic>> {
         forum_id,
         subject,
         author,
-        post_date: attrs.get("postdate").and_then(|s| s.parse().ok()).unwrap_or(0),
-        last_post_date: attrs.get("lastpost").and_then(|s| s.parse().ok()).unwrap_or(0),
-        replies: attrs.get("replies").and_then(|s| s.parse().ok()).unwrap_or(0),
+        post_date: attrs
+            .get("postdate")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
+        last_post_date: attrs
+            .get("lastpost")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
+        replies: attrs
+            .get("replies")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
         last_poster: attrs.get("lastposter").cloned().unwrap_or_default(),
         is_locked,
         is_bold,
         is_assembly,
         is_topped,
-        topic_type: attrs.get("type")
+        topic_type: attrs
+            .get("type")
             .and_then(|s| s.parse::<i32>().ok())
             .map(TopicType::from)
             .unwrap_or_default(),
         parent_id: None,
-        recommend: attrs.get("recommend").and_then(|s| s.parse().ok()).unwrap_or(0),
+        recommend: attrs
+            .get("recommend")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
     };
 
     Ok(Some(topic))
@@ -524,7 +553,8 @@ fn parse_user(node: &crate::parser::XmlNode<'_>) -> Result<Option<User>> {
         None => return Ok(None),
     };
 
-    let name = attrs.get("username")
+    let name = attrs
+        .get("username")
         .map(|s| UserName::parse(s))
         .unwrap_or_default();
 
@@ -533,12 +563,25 @@ fn parse_user(node: &crate::parser::XmlNode<'_>) -> Result<Option<User>> {
         name,
         avatar_url: attrs.get("avatar").cloned(),
         reputation: attrs.get("fame").and_then(|s| s.parse().ok()).unwrap_or(0),
-        posts: attrs.get("postnum").and_then(|s| s.parse().ok()).unwrap_or(0),
-        reg_date: attrs.get("regdate").and_then(|s| s.parse().ok()).unwrap_or(0),
+        posts: attrs
+            .get("postnum")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
+        reg_date: attrs
+            .get("regdate")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
         signature: attrs.get("signature").cloned(),
         is_admin: attrs.get("admincheck").map(|s| s != "0").unwrap_or(false),
-        is_mod: attrs.get("groupid").map(|s| s == "5" || s == "6").unwrap_or(false),
-        is_muted: attrs.get("mute").and_then(|s| s.parse::<i64>().ok()).map(|t| t > 0).unwrap_or(false),
+        is_mod: attrs
+            .get("groupid")
+            .map(|s| s == "5" || s == "6")
+            .unwrap_or(false),
+        is_muted: attrs
+            .get("mute")
+            .and_then(|s| s.parse::<i64>().ok())
+            .map(|t| t > 0)
+            .unwrap_or(false),
         honor: attrs.get("honor").cloned(),
     };
 
@@ -549,8 +592,8 @@ fn parse_post(
     node: &crate::parser::XmlNode<'_>,
     users: &std::collections::HashMap<String, User>,
 ) -> Result<Option<Post>> {
-    use crate::parser::parse_content;
     use crate::models::{PostId, VoteState};
+    use crate::parser::parse_content;
 
     let attrs = node.attrs();
 
@@ -568,7 +611,10 @@ fn parse_post(
     let content_raw = attrs.get("content").cloned().unwrap_or_default();
     let content = parse_content(&content_raw);
 
-    let floor = attrs.get("lou").and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
+    let floor = attrs
+        .get("lou")
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(0);
 
     let post = Post {
         id: PostId::new(id),
@@ -576,7 +622,10 @@ fn parse_post(
         floor,
         author,
         content,
-        post_date: attrs.get("postdatetimestamp").and_then(|s| s.parse().ok()).unwrap_or(0),
+        post_date: attrs
+            .get("postdatetimestamp")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
         edit_date: attrs.get("alterinfo").and_then(|s| s.parse().ok()),
         is_edited: attrs.get("alterinfo").is_some(),
         attachments: parse_attachments(node),
@@ -586,7 +635,8 @@ fn parse_post(
             user_vote: None,
         },
         score: attrs.get("score").and_then(|s| s.parse().ok()).unwrap_or(0),
-        is_hidden: attrs.get("score")
+        is_hidden: attrs
+            .get("score")
             .and_then(|s| s.parse::<i32>().ok())
             .map(|s| s < -50)
             .unwrap_or(false),
@@ -594,7 +644,10 @@ fn parse_post(
         signature: attrs.get("signature").cloned(),
         hot_replies: Vec::new(),
         comments: Vec::new(),
-        comment_count: attrs.get("comment_count").and_then(|s| s.parse().ok()).unwrap_or(0),
+        comment_count: attrs
+            .get("comment_count")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
     };
 
     Ok(Some(post))
@@ -644,19 +697,16 @@ fn parse_attachment(node: &XmlNode<'_>) -> Option<Attachment> {
         AttachmentKind::from_ext(&ext)
     };
 
-    let dimensions = explicit_type
-        .split(':')
-        .nth(1)
-        .and_then(|dim| {
-            let parts: Vec<&str> = dim.split('x').collect();
-            if parts.len() == 2 {
-                let w = parts[0].parse().ok()?;
-                let h = parts[1].parse().ok()?;
-                Some((w, h))
-            } else {
-                None
-            }
-        });
+    let dimensions = explicit_type.split(':').nth(1).and_then(|dim| {
+        let parts: Vec<&str> = dim.split('x').collect();
+        if parts.len() == 2 {
+            let w = parts[0].parse().ok()?;
+            let h = parts[1].parse().ok()?;
+            Some((w, h))
+        } else {
+            None
+        }
+    });
 
     let thumb_url = attrs.get("thumb").cloned().filter(|s| !s.is_empty());
 
@@ -667,10 +717,7 @@ fn parse_attachment(node: &XmlNode<'_>) -> Option<Attachment> {
         } else {
             name
         },
-        size: attrs
-            .get("size")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0),
+        size: attrs.get("size").and_then(|s| s.parse().ok()).unwrap_or(0),
         kind,
         thumb_url,
         dimensions,
@@ -687,7 +734,8 @@ fn parse_subforum(node: &crate::parser::XmlNode<'_>) -> Option<Subforum> {
     let name = children.get(1).map(|n| n.text()).unwrap_or_default();
     let info = children.get(2).map(|n| n.text()).unwrap_or_default();
     let filter_id = children.get(3).map(|n| n.text()).unwrap_or_default();
-    let attributes: u64 = children.get(4)
+    let attributes: u64 = children
+        .get(4)
         .and_then(|n| n.text().parse().ok())
         .unwrap_or(0);
 

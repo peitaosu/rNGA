@@ -1,15 +1,15 @@
 //! MCP Server implementation for NGA.
 
 use rmcp::{
-    ServerHandler, tool, tool_handler, tool_router,
     handler::server::{tool::ToolRouter, wrapper::Parameters},
     model::*,
-    ErrorData as McpError,
+    tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::config;
+use crate::handlers::{forum, post, topic, user};
 
 /// MCP Server for NGA forum operations.
 #[derive(Clone)]
@@ -25,13 +25,7 @@ impl NGAMCPServer {
     }
 
     fn build_client() -> Result<rnga::NGAClient, McpError> {
-        config::build_client()
-            .map_err(|e| McpError::internal_error(e.to_string(), None))
-    }
-
-    fn build_authed_client() -> Result<rnga::NGAClient, McpError> {
-        config::build_authed_client()
-            .map_err(|e| McpError::internal_error(e.to_string(), None))
+        config::build_client().map_err(|e| McpError::internal_error(e.to_string(), None))
     }
 
     fn to_json<T: Serialize>(value: &T) -> Result<String, McpError> {
@@ -44,7 +38,6 @@ impl NGAMCPServer {
     }
 }
 
-// Parameter structs
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct KeywordParam {
     /// Search keyword
@@ -55,9 +48,18 @@ pub struct KeywordParam {
 pub struct TopicListParams {
     /// Forum ID (fid)
     pub forum_id: String,
+    /// Treat ID as stid instead of fid
+    #[serde(default)]
+    pub stid: bool,
     /// Page number (default: 1)
     #[serde(default = "default_page")]
     pub page: u32,
+    /// Number of pages to fetch (default: 1)
+    #[serde(default = "default_one")]
+    pub pages: u32,
+    /// Sort order: lastpost, postdate, recommend
+    #[serde(default = "default_order")]
+    pub order: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -67,17 +69,46 @@ pub struct TopicReadParams {
     /// Page number (default: 1)
     #[serde(default = "default_page")]
     pub page: u32,
+    /// Filter by author ID
+    pub author: Option<String>,
+    /// Fetch all pages
+    #[serde(default)]
+    pub all: bool,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct TopicSearchParams {
     /// Forum ID (fid)
     pub forum_id: String,
+    /// Treat ID as stid instead of fid
+    #[serde(default)]
+    pub stid: bool,
     /// Search keyword
     pub keyword: String,
     /// Page number (default: 1)
     #[serde(default = "default_page")]
     pub page: u32,
+    /// Search in content
+    #[serde(default)]
+    pub content: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct RecentTopicsParams {
+    /// Forum ID (fid)
+    pub forum_id: String,
+    /// Treat ID as stid instead of fid
+    #[serde(default)]
+    pub stid: bool,
+    /// Time range (e.g., 1h, 30m, 1d)
+    #[serde(default = "default_range")]
+    pub range: String,
+    /// Page number (default: 1)
+    #[serde(default = "default_page")]
+    pub page: u32,
+    /// Include individual posts/comments
+    #[serde(default)]
+    pub with_posts: bool,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -93,170 +124,186 @@ pub struct UsernameParam {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-pub struct PostReplyParams {
-    /// Topic ID to reply to
+pub struct PostCommentsParams {
+    /// Topic ID
     pub topic_id: String,
-    /// Reply content
-    pub content: String,
+    /// Post ID
+    pub post_id: String,
+    /// Page number (default: 1)
+    #[serde(default = "default_page")]
+    pub page: u32,
 }
 
-fn default_page() -> u32 { 1 }
+fn default_page() -> u32 {
+    1
+}
+fn default_one() -> u32 {
+    1
+}
+fn default_order() -> String {
+    "lastpost".to_string()
+}
+fn default_range() -> String {
+    "1h".to_string()
+}
 
 #[tool_router]
 impl NGAMCPServer {
     #[tool(description = "List all forum categories and their forums")]
     async fn forum_list(&self) -> Result<CallToolResult, McpError> {
         let client = Self::build_client()?;
-        let categories = client.forums().list().await
+        let categories = forum::list_categories(&client)
+            .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
         Self::ok(Self::to_json(&categories)?)
     }
 
     #[tool(description = "Search forums by name")]
-    async fn forum_search(&self, params: Parameters<KeywordParam>) -> Result<CallToolResult, McpError> {
+    async fn forum_search(
+        &self,
+        params: Parameters<KeywordParam>,
+    ) -> Result<CallToolResult, McpError> {
         let client = Self::build_client()?;
-        let forums = client.forums().search(&params.0.keyword).await
+        let forums = forum::search_forums(&client, &params.0.keyword)
+            .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
         Self::ok(Self::to_json(&forums)?)
     }
 
-    #[tool(description = "List topics in a forum")]
-    async fn topic_list(&self, params: Parameters<TopicListParams>) -> Result<CallToolResult, McpError> {
-        use rnga::models::ForumIdKind;
-
+    #[tool(description = "List topics in a forum with optional multi-page fetching")]
+    async fn topic_list(
+        &self,
+        params: Parameters<TopicListParams>,
+    ) -> Result<CallToolResult, McpError> {
         let client = Self::build_client()?;
-        let result = client.topics()
-            .list(ForumIdKind::fid(&params.0.forum_id))
-            .page(params.0.page)
-            .send()
+        let options = topic::ListTopicsOptions {
+            is_stid: params.0.stid,
+            start_page: params.0.page,
+            num_pages: params.0.pages,
+            order: params.0.order,
+            concurrency: 4,
+        };
+        let result = topic::list_topics(&client, &params.0.forum_id, options)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-
-        #[derive(Serialize)]
-        struct Output { forum: Option<String>, page: u32, total_pages: u32, topics: Vec<TopicInfo> }
-        #[derive(Serialize)]
-        struct TopicInfo { id: String, subject: String, author: String, replies: i32 }
-
-        let output = Output {
-            forum: result.forum.map(|f| f.name),
-            page: params.0.page,
-            total_pages: result.total_pages,
-            topics: result.topics.iter().map(|t| TopicInfo {
-                id: t.id.to_string(),
-                subject: t.subject.content.clone(),
-                author: t.author.name.display().to_string(),
-                replies: t.replies,
-            }).collect(),
-        };
-        Self::ok(Self::to_json(&output)?)
+        Self::ok(Self::to_json(&result)?)
     }
 
-    #[tool(description = "Read a topic with its posts")]
-    async fn topic_read(&self, params: Parameters<TopicReadParams>) -> Result<CallToolResult, McpError> {
+    #[tool(description = "Read a topic with its posts, optionally fetching all pages")]
+    async fn topic_read(
+        &self,
+        params: Parameters<TopicReadParams>,
+    ) -> Result<CallToolResult, McpError> {
         let client = Self::build_client()?;
-        let result = client.topics()
-            .details(&params.0.topic_id)
-            .page(params.0.page)
-            .send()
+        let options = topic::ReadTopicOptions {
+            page: params.0.page,
+            author: params.0.author,
+            fetch_all: params.0.all,
+            concurrency: 4,
+        };
+        let result = topic::read_topic(&client, &params.0.topic_id, options)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-
-        #[derive(Serialize)]
-        struct Output { forum: String, subject: String, author: String, page: u32, total_pages: u32, posts: Vec<PostInfo> }
-        #[derive(Serialize)]
-        struct PostInfo { floor: i32, author: String, content: String, score: i32 }
-
-        let output = Output {
-            forum: result.forum_name,
-            subject: result.topic.subject.content.clone(),
-            author: result.topic.author.name.display().to_string(),
-            page: params.0.page,
-            total_pages: result.total_pages,
-            posts: result.posts.iter().map(|p| PostInfo {
-                floor: p.floor,
-                author: p.author.name.display().to_string(),
-                content: p.content.to_plain_text(),
-                score: p.score,
-            }).collect(),
-        };
-        Self::ok(Self::to_json(&output)?)
+        Self::ok(Self::to_json(&result)?)
     }
 
     #[tool(description = "Search topics in a forum by keyword")]
-    async fn topic_search(&self, params: Parameters<TopicSearchParams>) -> Result<CallToolResult, McpError> {
-        use rnga::models::ForumIdKind;
-
+    async fn topic_search(
+        &self,
+        params: Parameters<TopicSearchParams>,
+    ) -> Result<CallToolResult, McpError> {
         let client = Self::build_client()?;
-        let result = client.topics()
-            .search(ForumIdKind::fid(&params.0.forum_id), &params.0.keyword)
-            .page(params.0.page)
-            .send()
+        let options = topic::SearchTopicsOptions {
+            is_stid: params.0.stid,
+            page: params.0.page,
+            search_content: params.0.content,
+        };
+        let result = topic::search_topics(&client, &params.0.forum_id, &params.0.keyword, options)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        Self::ok(Self::to_json(&result)?)
+    }
 
-        #[derive(Serialize)]
-        struct Output { keyword: String, page: u32, total_pages: u32, topics: Vec<TopicInfo> }
-        #[derive(Serialize)]
-        struct TopicInfo { id: String, subject: String, author: String, replies: i32 }
-
-        let output = Output {
-            keyword: params.0.keyword.clone(),
+    #[tool(description = "Get recent topics/posts in a forum within a time range")]
+    async fn topic_recent(
+        &self,
+        params: Parameters<RecentTopicsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let client = Self::build_client()?;
+        let options = topic::RecentTopicsOptions {
+            is_stid: params.0.stid,
+            range: params.0.range,
             page: params.0.page,
-            total_pages: result.total_pages,
-            topics: result.topics.iter().map(|t| TopicInfo {
-                id: t.id.to_string(),
-                subject: t.subject.content.clone(),
-                author: t.author.name.display().to_string(),
-                replies: t.replies,
-            }).collect(),
+            order: "lastpost".to_string(),
+            with_posts: params.0.with_posts,
+            concurrency: 4,
         };
-        Self::ok(Self::to_json(&output)?)
+        let result = topic::recent_topics(&client, &params.0.forum_id, options)
+            .await
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        Self::ok(Self::to_json(&result)?)
+    }
+
+    #[tool(description = "Get hot replies for a post")]
+    async fn post_hot_replies(
+        &self,
+        params: Parameters<PostCommentsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let client = Self::build_client()?;
+        let replies = post::hot_replies(&client, &params.0.topic_id, &params.0.post_id)
+            .await
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        Self::ok(Self::to_json(&replies)?)
+    }
+
+    #[tool(description = "Get comments on a post")]
+    async fn post_comments(
+        &self,
+        params: Parameters<PostCommentsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let client = Self::build_client()?;
+        let result = post::comments(
+            &client,
+            &params.0.topic_id,
+            &params.0.post_id,
+            params.0.page,
+        )
+        .await
+        .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        Self::ok(Self::to_json(&result)?)
     }
 
     #[tool(description = "Get user profile by ID")]
     async fn user_get(&self, params: Parameters<UserIdParam>) -> Result<CallToolResult, McpError> {
         let client = Self::build_client()?;
-        let user = client.users().get(&params.0.user_id).await
-            .map_err(|e: rnga::Error| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&user)?)
+        let user_info = user::get_user(&client, &params.0.user_id)
+            .await
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        Self::ok(Self::to_json(&user_info)?)
     }
 
     #[tool(description = "Get user profile by username")]
-    async fn user_by_name(&self, params: Parameters<UsernameParam>) -> Result<CallToolResult, McpError> {
+    async fn user_by_name(
+        &self,
+        params: Parameters<UsernameParam>,
+    ) -> Result<CallToolResult, McpError> {
         let client = Self::build_client()?;
-        let user = client.users().get_by_name(&params.0.username).await
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&user)?)
-    }
-
-    #[tool(description = "Reply to a topic (requires authentication via CLI: rnga auth login)")]
-    async fn post_reply(&self, params: Parameters<PostReplyParams>) -> Result<CallToolResult, McpError> {
-        let client = Self::build_authed_client()?;
-        let result = client.posts()
-            .reply(&params.0.topic_id)
-            .content(&params.0.content)
-            .send()
+        let user_info = user::get_user_by_name(&client, &params.0.username)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(format!("Reply posted (post ID: {})", result.post_id))
+        Self::ok(Self::to_json(&user_info)?)
     }
 
-    #[tool(description = "Get unread notification counts (requires authentication)")]
-    async fn notification_counts(&self) -> Result<CallToolResult, McpError> {
-        let client = Self::build_authed_client()?;
-        let counts = client.notifications().counts().await
+    #[tool(description = "Search users by keyword")]
+    async fn user_search(
+        &self,
+        params: Parameters<KeywordParam>,
+    ) -> Result<CallToolResult, McpError> {
+        let client = Self::build_client()?;
+        let results = user::search_users(&client, &params.0.keyword)
+            .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-
-        #[derive(Serialize)]
-        struct Output { replies: i32, mentions: i32, messages: i32, total: i32 }
-
-        let output = Output {
-            replies: counts.replies,
-            mentions: counts.mentions,
-            messages: counts.messages,
-            total: counts.total(),
-        };
-        Self::ok(Self::to_json(&output)?)
+        Self::ok(Self::to_json(&results)?)
     }
 }
 

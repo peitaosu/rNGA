@@ -116,7 +116,9 @@ mod tests {
     async fn test_ttl_expiry() {
         let cache = MemoryCache::new();
 
-        cache.set("key", b"value", Some(Duration::from_millis(60))).await;
+        cache
+            .set("key", b"value", Some(Duration::from_millis(60)))
+            .await;
 
         assert!(cache.get("key").await.is_some());
 

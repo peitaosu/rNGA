@@ -82,4 +82,3 @@ pub fn build_authed_client() -> Result<NGAClient> {
         .build()
         .context("Failed to build NGA client")
 }
-

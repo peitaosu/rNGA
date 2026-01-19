@@ -9,7 +9,7 @@ pub use http::{Device, HttpConfig, FORUM_ICON_PATH};
 use crate::api::{ForumApi, MessageApi, NotificationApi, PostApi, TopicApi, UserApi};
 use crate::cache::CacheStorage;
 use crate::error::{Error, Result};
-use http::{HttpExecutor, build_client};
+use http::{build_client, HttpExecutor};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -133,7 +133,9 @@ impl NGAClientInner {
 
     /// Get optional auth as tuple.
     pub fn auth_tuple_opt(&self) -> Option<(&str, &str)> {
-        self.auth.as_ref().map(|a| (a.token.as_str(), a.uid.as_str()))
+        self.auth
+            .as_ref()
+            .map(|a| (a.token.as_str(), a.uid.as_str()))
     }
 
     /// Create HTTP executor.
@@ -149,7 +151,9 @@ impl NGAClientInner {
         form: &[(&str, &str)],
     ) -> Result<String> {
         let auth = self.auth_tuple()?;
-        self.executor().post_form(api, query, form, Some(auth)).await
+        self.executor()
+            .post_form(api, query, form, Some(auth))
+            .await
     }
 
     /// Execute a POST request.

@@ -1,4 +1,4 @@
-//! Command implementations.
+//! Shared handlers for CLI and MCP.
 
 pub mod forum;
 pub mod message;

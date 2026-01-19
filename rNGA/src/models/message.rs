@@ -60,7 +60,7 @@ mod tests {
             is_mine: false,
             ..Default::default()
         };
-        
+
         let mine = msg.clone().mark_as_mine();
         assert!(mine.is_mine);
         assert!(!msg.is_mine);

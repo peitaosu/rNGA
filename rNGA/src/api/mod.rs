@@ -13,8 +13,8 @@ pub use message::{
 };
 pub use notification::{NotificationApi, NotificationListBuilder, NotificationListResult};
 pub use post::{
-    CommentBuilder, CommentResult, CommentsResult, PostApi, ReplyBuilder, ReplyResult,
-    UserPost, UserPostsResult, VoteResult,
+    CommentBuilder, CommentResult, CommentsResult, PostApi, ReplyBuilder, ReplyResult, UserPost,
+    UserPostsResult, VoteResult,
 };
 pub use topic::{
     FavoriteTopicsBuilder, Subforum, TopicApi, TopicDetailsBuilder, TopicDetailsResult,

@@ -3,9 +3,11 @@
 use anyhow::Result;
 use clap::Subcommand;
 use colored::Colorize;
+use rust_i18n::t;
 
 use crate::config::build_authed_client;
-use crate::output::{print_table, MessagePostRow, MessageRow, OutputFormat};
+use crate::handlers::message as handlers;
+use crate::output::{print_table, OutputFormat};
 
 #[derive(Subcommand)]
 pub enum MessageAction {
@@ -47,10 +49,10 @@ pub enum MessageAction {
     },
 }
 
-pub async fn handle(action: MessageAction, format: OutputFormat, verbose: bool) -> Result<()> {
+pub async fn handle(action: MessageAction, format: OutputFormat, _verbose: bool) -> Result<()> {
     match action {
         MessageAction::List { page } => list_conversations(page, format).await,
-        MessageAction::Read { mid, page } => read_conversation(&mid, page, format, verbose).await,
+        MessageAction::Read { mid, page } => read_conversation(&mid, page, format).await,
         MessageAction::Send {
             to,
             subject,
@@ -62,66 +64,51 @@ pub async fn handle(action: MessageAction, format: OutputFormat, verbose: bool) 
 
 async fn list_conversations(page: u32, format: OutputFormat) -> Result<()> {
     let client = build_authed_client()?;
-    let result = client.messages().list(page).await?;
-
-    if matches!(format, OutputFormat::Plain) {
-        println!("Conversations (page {}/{})\n", page, result.total_pages);
-    }
-
-    let rows: Vec<MessageRow> = result.conversations.iter().map(MessageRow::from).collect();
-    print_table(rows, format);
-
-    Ok(())
-}
-
-async fn read_conversation(
-    mid: &str,
-    page: u32,
-    format: OutputFormat,
-    _verbose: bool,
-) -> Result<()> {
-    let client = build_authed_client()?;
-    let result = client.messages().conversation(mid).page(page).send().await?;
+    let result = handlers::list_conversations(&client, page).await?;
 
     if matches!(format, OutputFormat::Plain) {
         println!(
-            "Conversation with {} (page {}/{})\n",
-            result.other_username.green(),
-            page,
-            result.total_pages
+            "{}\n",
+            t!("conversations", page = page, total = result.total_pages)
         );
     }
 
-    let rows: Vec<MessagePostRow> = result.messages.iter().map(MessagePostRow::from).collect();
-    print_table(rows, format);
+    print_table(result.conversations, format);
+    Ok(())
+}
 
+async fn read_conversation(mid: &str, page: u32, format: OutputFormat) -> Result<()> {
+    let client = build_authed_client()?;
+    let result = handlers::read_conversation(&client, mid, page).await?;
+
+    if matches!(format, OutputFormat::Plain) {
+        println!(
+            "{}\n",
+            t!(
+                "conversation_with",
+                user = result.other_username.green(),
+                page = page,
+                total = result.total_pages
+            )
+        );
+    }
+
+    print_table(result.messages, format);
     Ok(())
 }
 
 async fn send_message(to: &str, subject: &str, content: &str) -> Result<()> {
     let client = build_authed_client()?;
+    let result = handlers::send_message(&client, to, subject, content).await?;
 
-    client
-        .messages()
-        .send_new()
-        .to(to)
-        .subject(subject)
-        .content(content)
-        .send()
-        .await?;
-
-    println!("{} Message sent to {}", "✓".green(), to);
-
+    println!("{}", t!("message_sent_to", user = result.to));
     Ok(())
 }
 
 async fn reply_message(mid: &str, content: &str) -> Result<()> {
     let client = build_authed_client()?;
+    handlers::reply_message(&client, mid, content).await?;
 
-    client.messages().reply(mid).content(content).send().await?;
-
-    println!("{} Reply sent", "✓".green());
-
+    println!("{}", t!("reply_sent"));
     Ok(())
 }
-

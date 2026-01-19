@@ -2,12 +2,16 @@
 
 mod commands;
 mod config;
+mod handlers;
 mod mcp;
 mod output;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use commands::{forum, message, notification, post, topic, user};
+use rust_i18n::t;
+
+rust_i18n::i18n!("src/locales", fallback = "en");
 
 /// NGA Forum CLI and MCP Server
 #[derive(Parser)]
@@ -22,6 +26,10 @@ struct Cli {
     /// Show verbose output
     #[arg(short, long, global = true)]
     verbose: bool,
+
+    /// Language for output (en, zh-CN)
+    #[arg(short, long, global = true, default_value = "en")]
+    lang: String,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -106,6 +114,8 @@ enum AuthAction {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    rust_i18n::set_locale(&cli.lang);
+
     if cli.mcp {
         tracing_subscriber::fmt()
             .with_env_filter(
@@ -118,9 +128,9 @@ async fn main() -> Result<()> {
         return mcp::run_server().await;
     }
 
-    let command = cli.command.ok_or_else(|| {
-        anyhow::anyhow!("No command provided. Use --help for usage or --mcp to run as MCP server.")
-    })?;
+    let command = cli
+        .command
+        .ok_or_else(|| anyhow::anyhow!("{}", t!("no_command")))?;
 
     match command {
         Commands::Auth { action } => handle_auth(action).await,
@@ -134,10 +144,13 @@ async fn main() -> Result<()> {
         Commands::Message { action } => message::handle(action, cli.format, cli.verbose).await,
         Commands::Config => {
             let cfg = config::load_config()?;
-            println!("Config file: {}", config::config_path()?.display());
-            println!("Authenticated: {}", cfg.auth.is_some());
+            println!(
+                "{}",
+                t!("config_file", path = config::config_path()?.display())
+            );
+            println!("{}", t!("authenticated", status = cfg.auth.is_some()));
             if let Some(auth) = &cfg.auth {
-                println!("User ID: {}", auth.uid);
+                println!("{}", t!("user_id", uid = &auth.uid));
             }
             Ok(())
         }
@@ -153,25 +166,24 @@ async fn handle_auth(action: AuthAction) -> Result<()> {
                 uid: uid.clone(),
             });
             config::save_config(&cfg)?;
-            println!("Logged in as user {}", uid);
+            println!("{}", t!("logged_in_as", uid = &uid));
             Ok(())
         }
         AuthAction::Logout => {
             let mut cfg = config::load_config()?;
             cfg.auth = None;
             config::save_config(&cfg)?;
-            println!("Logged out");
+            println!("{}", t!("logged_out"));
             Ok(())
         }
         AuthAction::Status => {
             let cfg = config::load_config()?;
             if let Some(auth) = &cfg.auth {
-                println!("Logged in as user {}", auth.uid);
+                println!("{}", t!("logged_in_as", uid = &auth.uid));
             } else {
-                println!("Not logged in");
+                println!("{}", t!("not_logged_in"));
             }
             Ok(())
         }
     }
 }
-

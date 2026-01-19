@@ -19,12 +19,12 @@ impl ForumIdKind {
     pub fn fid(id: impl Into<String>) -> Self {
         ForumIdKind::Fid(id.into())
     }
-    
+
     /// Create from stid.
     pub fn stid(id: impl Into<String>) -> Self {
         ForumIdKind::Stid(id.into())
     }
-    
+
     /// Get the underlying ID string.
     pub fn id(&self) -> &str {
         match self {
@@ -32,17 +32,17 @@ impl ForumIdKind {
             ForumIdKind::Stid(s) => s,
         }
     }
-    
+
     /// Check if this is a fid.
     pub fn is_fid(&self) -> bool {
         matches!(self, ForumIdKind::Fid(_))
     }
-    
+
     /// Check if this is a stid.
     pub fn is_stid(&self) -> bool {
         matches!(self, ForumIdKind::Stid(_))
     }
-    
+
     /// Get the query parameter name for this ID type.
     pub fn param_name(&self) -> &'static str {
         match self {
@@ -78,7 +78,7 @@ impl Forum {
     pub fn minimal(id: ForumIdKind, name: impl Into<String>) -> Self {
         let icon_id = id.id();
         let icon_url = format!("{}{}.png", FORUM_ICON_PATH, icon_id);
-        
+
         Self {
             id: Some(id),
             name: name.into(),
@@ -87,7 +87,7 @@ impl Forum {
             topped_topic_id: String::new(),
         }
     }
-    
+
     /// Get the forum ID string regardless of type.
     pub fn id_str(&self) -> Option<&str> {
         self.id.as_ref().map(|id| id.id())

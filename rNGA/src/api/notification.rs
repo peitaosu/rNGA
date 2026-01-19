@@ -21,14 +21,14 @@ impl NotificationApi {
 
     /// Get unread notification counts.
     pub async fn counts(&self) -> Result<NotificationCounts> {
-        let xml = self.client.post_authed(
-            "nuke.php",
-            &[
-                ("__lib", "noti"),
-                ("__act", "get_all_unread"),
-            ],
-            &[],
-        ).await?;
+        let xml = self
+            .client
+            .post_authed(
+                "nuke.php",
+                &[("__lib", "noti"), ("__act", "get_all_unread")],
+                &[],
+            )
+            .await?;
 
         parse_notification_counts(&xml)
     }
@@ -44,30 +44,34 @@ impl NotificationApi {
 
     /// Mark notification as read.
     pub async fn mark_read(&self, notification_id: impl AsRef<str>) -> Result<()> {
-        self.client.post_authed(
-            "nuke.php",
-            &[
-                ("__lib", "noti"),
-                ("__act", "read"),
-                ("id", notification_id.as_ref()),
-            ],
-            &[],
-        ).await?;
+        self.client
+            .post_authed(
+                "nuke.php",
+                &[
+                    ("__lib", "noti"),
+                    ("__act", "read"),
+                    ("id", notification_id.as_ref()),
+                ],
+                &[],
+            )
+            .await?;
 
         Ok(())
     }
 
     /// Mark all notifications of a type as read.
     pub async fn mark_all_read(&self, kind: NotificationType) -> Result<()> {
-        self.client.post_authed(
-            "nuke.php",
-            &[
-                ("__lib", "noti"),
-                ("__act", "read_all"),
-                ("type", kind.param()),
-            ],
-            &[],
-        ).await?;
+        self.client
+            .post_authed(
+                "nuke.php",
+                &[
+                    ("__lib", "noti"),
+                    ("__act", "read_all"),
+                    ("type", kind.param()),
+                ],
+                &[],
+            )
+            .await?;
 
         Ok(())
     }
@@ -90,17 +94,20 @@ impl NotificationListBuilder {
     /// Execute the request.
     pub async fn send(self) -> Result<NotificationListResult> {
         let page_str = self.page.to_string();
-        
-        let xml = self.client.post_authed(
-            "nuke.php",
-            &[
-                ("__lib", "noti"),
-                ("__act", "get_list"),
-                ("type", self.kind.param()),
-                ("page", &page_str),
-            ],
-            &[],
-        ).await?;
+
+        let xml = self
+            .client
+            .post_authed(
+                "nuke.php",
+                &[
+                    ("__lib", "noti"),
+                    ("__act", "get_list"),
+                    ("type", self.kind.param()),
+                    ("page", &page_str),
+                ],
+                &[],
+            )
+            .await?;
 
         parse_notification_list(&xml, self.kind)
     }
@@ -117,13 +124,9 @@ pub struct NotificationListResult {
     pub page: u32,
 }
 
-// ============================================================================
-// Parsing helpers
-// ============================================================================
-
 fn parse_notification_counts(xml: &str) -> Result<NotificationCounts> {
     let doc = XmlDocument::parse(xml)?;
-    
+
     Ok(NotificationCounts {
         replies: doc.int_or("/root/data/item/reply", 0) as i32,
         quotes: doc.int_or("/root/data/item/quote", 0) as i32,
@@ -145,7 +148,11 @@ fn parse_notification_list(xml: &str, kind: NotificationType) -> Result<Notifica
     }
 
     let total_rows = doc.int_or("/root/__ROWS", 0) as u32;
-    let total_pages = if total_rows > 0 { (total_rows + 19) / 20 } else { 1 };
+    let total_pages = if total_rows > 0 {
+        (total_rows + 19) / 20
+    } else {
+        1
+    };
 
     Ok(NotificationListResult {
         notifications,
@@ -165,7 +172,8 @@ fn parse_notification(
         None => return Ok(None),
     };
 
-    let content = attrs.get("0")
+    let content = attrs
+        .get("0")
         .or_else(|| attrs.get("content"))
         .cloned()
         .unwrap_or_default();
@@ -176,10 +184,12 @@ fn parse_notification(
         (None, None)
     };
 
-    let from_user_id = attrs.get("from_uid")
+    let from_user_id = attrs
+        .get("from_uid")
         .or_else(|| attrs.get("2"))
         .map(|s| UserId::new(s));
-    let from_username = attrs.get("from_username")
+    let from_username = attrs
+        .get("from_username")
         .or_else(|| attrs.get("3"))
         .cloned();
 
@@ -187,7 +197,8 @@ fn parse_notification(
         id,
         kind,
         content: html_escape::decode_html_entities(&content).into_owned(),
-        time: attrs.get("time")
+        time: attrs
+            .get("time")
             .or_else(|| attrs.get("4"))
             .and_then(|s| s.parse().ok())
             .unwrap_or(0),
@@ -210,11 +221,13 @@ fn extract_ids_from_url(url: &str) -> (Option<TopicId>, Option<PostId>) {
         static ref PID_RE: Regex = Regex::new(r"pid=(\d+)").unwrap();
     }
 
-    let topic_id = TID_RE.captures(url)
+    let topic_id = TID_RE
+        .captures(url)
         .and_then(|c| c.get(1))
         .map(|m| TopicId::new(m.as_str()));
 
-    let post_id = PID_RE.captures(url)
+    let post_id = PID_RE
+        .captures(url)
         .and_then(|c| c.get(1))
         .map(|m| PostId::new(m.as_str()));
 
@@ -229,7 +242,7 @@ mod tests {
     fn test_extract_ids_from_url() {
         let url = "read.php?tid=12345&pid=67890";
         let (tid, pid) = extract_ids_from_url(url);
-        
+
         assert_eq!(tid.unwrap().as_str(), "12345");
         assert_eq!(pid.unwrap().as_str(), "67890");
     }

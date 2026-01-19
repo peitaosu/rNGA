@@ -1,9 +1,9 @@
 //! XML parsing for NGA responses.
 
 use crate::error::{Error, Result};
+use std::collections::HashMap;
 use sxd_document::parser;
 use sxd_xpath::{nodeset::Node, Context, Factory, Value};
-use std::collections::HashMap;
 
 /// Wrapper around an XML document providing convenient access methods.
 pub struct XmlDocument {
@@ -14,7 +14,7 @@ impl XmlDocument {
     /// Parse XML text into a document.
     pub fn parse(xml: &str) -> Result<Self> {
         check_nga_error(xml)?;
-        
+
         let package = parser::parse(xml).map_err(|e| Error::Xml(e.to_string()))?;
         Ok(Self { package })
     }
@@ -31,12 +31,12 @@ impl XmlDocument {
             .build(expr)
             .map_err(|e| Error::XPath(e.to_string()))?
             .ok_or_else(|| Error::XPath("Empty XPath".into()))?;
-        
+
         let context = Context::new();
         let value = xpath
             .evaluate(&context, self.doc().root())
             .map_err(|e| Error::XPath(e.to_string()))?;
-        
+
         Ok(XPathResult { value })
     }
 
@@ -137,15 +137,12 @@ impl<'a> XmlNode<'a> {
     /// Get all values as a map.
     pub fn attrs(&self) -> HashMap<String, String> {
         let mut map = HashMap::new();
-        
+
         if let Some(e) = self.as_element() {
             for attr in e.attributes() {
-                map.insert(
-                    attr.name().local_part().to_owned(),
-                    attr.value().to_owned(),
-                );
+                map.insert(attr.name().local_part().to_owned(), attr.value().to_owned());
             }
-            
+
             for child in e.children() {
                 if let sxd_document::dom::ChildOfElement::Element(child_el) = child {
                     let name = child_el.name().local_part().to_owned();
@@ -154,7 +151,7 @@ impl<'a> XmlNode<'a> {
                 }
             }
         }
-        
+
         map
     }
 
@@ -162,20 +159,27 @@ impl<'a> XmlNode<'a> {
     pub fn text(&self) -> String {
         match self.0 {
             Node::Text(t) => t.text().to_owned(),
-            Node::Element(e) => e.children().iter().filter_map(|c| {
-                if let sxd_document::dom::ChildOfElement::Text(t) = c {
-                    Some(t.text())
-                } else {
-                    None
-                }
-            }).collect::<Vec<_>>().join(""),
+            Node::Element(e) => e
+                .children()
+                .iter()
+                .filter_map(|c| {
+                    if let sxd_document::dom::ChildOfElement::Text(t) = c {
+                        Some(t.text())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(""),
             _ => String::new(),
         }
     }
 
     /// Get element name.
     pub fn name(&self) -> &str {
-        self.as_element().map(|e| e.name().local_part()).unwrap_or("")
+        self.as_element()
+            .map(|e| e.name().local_part())
+            .unwrap_or("")
     }
 
     /// Get as element.
@@ -205,7 +209,10 @@ impl<'a> XmlNode<'a> {
 
     /// Select children with specific name.
     pub fn children_named(&self, name: &str) -> Vec<XmlNode<'a>> {
-        self.children().into_iter().filter(|n| n.name() == name).collect()
+        self.children()
+            .into_iter()
+            .filter(|n| n.name() == name)
+            .collect()
     }
 
     /// Get first child with name.
@@ -220,18 +227,23 @@ fn parse_int(s: &str) -> Result<i64> {
     if s.is_empty() {
         return Ok(0);
     }
-    
+
     if s.contains('e') || s.contains('E') {
-        let f: f64 = s.parse().map_err(|_| Error::parse(format!("Invalid number: {}", s)))?;
+        let f: f64 = s
+            .parse()
+            .map_err(|_| Error::parse(format!("Invalid number: {}", s)))?;
         return Ok(f as i64);
     }
-    
+
     if s.contains('.') {
-        let f: f64 = s.parse().map_err(|_| Error::parse(format!("Invalid number: {}", s)))?;
+        let f: f64 = s
+            .parse()
+            .map_err(|_| Error::parse(format!("Invalid number: {}", s)))?;
         return Ok(f as i64);
     }
-    
-    s.parse().map_err(|_| Error::parse(format!("Invalid integer: {}", s)))
+
+    s.parse()
+        .map_err(|_| Error::parse(format!("Invalid integer: {}", s)))
 }
 
 /// Check if XML response contains an NGA error.
@@ -239,12 +251,12 @@ fn check_nga_error(xml: &str) -> Result<()> {
     if !xml.contains("__error") && !xml.contains("error code=") {
         return Ok(());
     }
-    
+
     if let Some(code_start) = xml.find("code=\"") {
         let code_start = code_start + 6;
         if let Some(code_end) = xml[code_start..].find('"') {
             let code = &xml[code_start..code_start + code_end];
-            
+
             let message = if let Some(msg_start) = xml.find("message=\"") {
                 let msg_start = msg_start + 9;
                 xml[msg_start..]
@@ -254,17 +266,17 @@ fn check_nga_error(xml: &str) -> Result<()> {
             } else {
                 "Unknown error"
             };
-            
+
             let message = html_escape::decode_html_entities(message);
-            
+
             return Err(Error::nga(code, message.as_ref()));
         }
     }
-    
+
     if xml.contains("__error") {
         return Err(Error::nga("-1", "Error response received"));
     }
-    
+
     Ok(())
 }
 
@@ -272,7 +284,7 @@ fn check_nga_error(xml: &str) -> Result<()> {
 pub fn extract_kv(text: &str) -> HashMap<String, String> {
     let parts: Vec<&str> = text.split('\t').collect();
     let mut map = HashMap::new();
-    
+
     for chunk in parts.chunks(2) {
         if chunk.len() == 2 {
             let key = chunk[0].trim();
@@ -282,7 +294,7 @@ pub fn extract_kv(text: &str) -> HashMap<String, String> {
             }
         }
     }
-    
+
     map
 }
 
@@ -317,7 +329,7 @@ mod tests {
     fn test_xml_parse() {
         let xml = r#"<?xml version="1.0"?><root><item id="1" name="test"/></root>"#;
         let doc = XmlDocument::parse(xml).unwrap();
-        
+
         let items = doc.select("//item").unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].attr("id"), Some("1".to_owned()));
@@ -329,7 +341,7 @@ mod tests {
         let error_xml = r#"<error code="1" message="Not logged in"/>"#;
         let result = check_nga_error(error_xml);
         assert!(result.is_err());
-        
+
         let ok_xml = r#"<data><item id="1"/></data>"#;
         assert!(check_nga_error(ok_xml).is_ok());
     }

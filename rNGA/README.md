@@ -2,14 +2,6 @@
 
 A Rust client library for the NGA (艾泽拉斯国家地理) forum.
 
-## Features
-
-- **Pure Rust** - No FFI dependencies, fully native types
-- **Async-first** - Built on tokio for async operations
-- **Type-safe** - Strong types for IDs, enums, and API responses
-- **Easy to use** - Builder pattern APIs with sensible defaults
-- **Pluggable caching** - Trait-based cache abstraction
-
 ## Installation
 
 Add to your `Cargo.toml`:

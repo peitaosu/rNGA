@@ -14,12 +14,12 @@ macro_rules! define_id {
             pub fn new(id: impl Into<String>) -> Self {
                 $name(id.into())
             }
-            
+
             /// Check if this ID is empty or "0".
             pub fn is_empty(&self) -> bool {
                 self.0.is_empty() || self.0 == "0"
             }
-            
+
             /// Get the inner string.
             pub fn as_str(&self) -> &str {
                 &self.0
@@ -37,19 +37,19 @@ macro_rules! define_id {
                 $name(s.to_owned())
             }
         }
-        
+
         impl From<&String> for $name {
             fn from(s: &String) -> Self {
                 $name(s.clone())
             }
         }
-        
+
         impl From<i64> for $name {
             fn from(n: i64) -> Self {
                 $name(n.to_string())
             }
         }
-        
+
         impl From<i32> for $name {
             fn from(n: i32) -> Self {
                 $name(n.to_string())
@@ -67,7 +67,7 @@ macro_rules! define_id {
                 $name("0".to_owned())
             }
         }
-        
+
         impl AsRef<str> for $name {
             fn as_ref(&self) -> &str {
                 &self.0

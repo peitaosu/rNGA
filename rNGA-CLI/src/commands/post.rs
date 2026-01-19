@@ -4,9 +4,11 @@ use anyhow::Result;
 use clap::Subcommand;
 use colored::Colorize;
 use rnga::models::*;
+use rust_i18n::t;
 
 use crate::config::{build_authed_client, build_client};
-use crate::output::{print_table, LightPostRow, OutputFormat};
+use crate::handlers::post as handlers;
+use crate::output::{print_table, OutputFormat};
 
 #[derive(Subcommand)]
 pub enum PostAction {
@@ -113,63 +115,70 @@ pub async fn handle(action: PostAction, format: OutputFormat, _verbose: bool) ->
 
 async fn vote(topic_id: &str, post_id: &str, vote: Vote) -> Result<()> {
     let client = build_authed_client()?;
-    let result = client.posts().vote(topic_id, post_id, vote).await?;
+    let result = handlers::vote(&client, topic_id, post_id, vote).await?;
 
-    let direction = match vote {
-        Vote::Up => "Upvoted".green(),
-        Vote::Down => "Downvoted".red(),
+    let msg = match result.direction.as_str() {
+        "up" => t!(
+            "upvoted_post",
+            id = result.post_id,
+            up = result.up,
+            down = result.down
+        )
+        .to_string()
+        .green(),
+        _ => t!(
+            "downvoted_post",
+            id = result.post_id,
+            up = result.up,
+            down = result.down
+        )
+        .to_string()
+        .red(),
     };
 
-    println!(
-        "{} post {}. Score: {} up, {} down",
-        direction, post_id, result.state.up, result.state.down
-    );
+    println!("{}", msg);
 
     Ok(())
 }
 
 async fn hot_replies(topic_id: &str, post_id: &str, format: OutputFormat) -> Result<()> {
     let client = build_client()?;
-    let replies = client.posts().hot_replies(topic_id, post_id).await?;
+    let replies = handlers::hot_replies(&client, topic_id, post_id).await?;
 
     if replies.is_empty() {
         if matches!(format, OutputFormat::Plain) {
-            println!("No hot replies");
+            println!("{}", t!("no_hot_replies"));
         }
         return Ok(());
     }
 
     if matches!(format, OutputFormat::Plain) {
-        println!("{} hot replies\n", replies.len());
+        println!("{}\n", t!("hot_replies_count", count = replies.len()));
     }
 
-    let rows: Vec<LightPostRow> = replies.iter().map(LightPostRow::from).collect();
-    print_table(rows, format);
-
+    print_table(replies, format);
     Ok(())
 }
 
 async fn comments(topic_id: &str, post_id: &str, page: u32, format: OutputFormat) -> Result<()> {
     let client = build_client()?;
-    let result = client.posts().comments(topic_id, post_id, page).await?;
+    let result = handlers::comments(&client, topic_id, post_id, page).await?;
 
     if result.comments.is_empty() {
         if matches!(format, OutputFormat::Plain) {
-            println!("No comments");
+            println!("{}", t!("no_comments"));
         }
         return Ok(());
     }
 
     if matches!(format, OutputFormat::Plain) {
         println!(
-            "Comments (page {}/{})\n",
-            page, result.total_pages
+            "{}\n",
+            t!("comments_page", page = page, total = result.total_pages)
         );
     }
 
-    let rows: Vec<LightPostRow> = result.comments.iter().map(LightPostRow::from).collect();
-    print_table(rows, format);
-
+    print_table(result.comments, format);
     Ok(())
 }
 
@@ -180,49 +189,27 @@ async fn reply(
     anonymous: bool,
 ) -> Result<()> {
     let client = build_authed_client()?;
+    let result = handlers::reply(&client, topic_id, content, quote.as_deref(), anonymous).await?;
 
-    let mut builder = client.posts().reply(topic_id).content(content);
-
-    if let Some(quote_id) = quote {
-        builder = builder.quote(quote_id);
-    }
-
-    if anonymous {
-        builder = builder.anonymous(true);
-    }
-
-    let result = builder.send().await?;
-
-    println!(
-        "{} Posted reply (post ID: {})",
-        "✓".green(),
-        result.post_id
-    );
+    println!("{}", t!("posted_reply", id = result.post_id));
 
     Ok(())
 }
 
 async fn comment(topic_id: &str, post_id: &str, content: &str) -> Result<()> {
     let client = build_authed_client()?;
+    handlers::comment(&client, topic_id, post_id, content).await?;
 
-    client
-        .posts()
-        .comment(topic_id, post_id)
-        .content(content)
-        .send()
-        .await?;
-
-    println!("{} Posted comment", "✓".green());
+    println!("{}", t!("posted_comment"));
 
     Ok(())
 }
 
 async fn fetch_quote(topic_id: &str, post_id: &str) -> Result<()> {
     let client = build_authed_client()?;
-    let content = client.posts().fetch_quote_content(topic_id, post_id).await?;
+    let result = handlers::fetch_quote_content(&client, topic_id, post_id).await?;
 
-    println!("{}", content);
+    println!("{}", result.content);
 
     Ok(())
 }
-

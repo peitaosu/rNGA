@@ -13,10 +13,10 @@ pub use error::{Error, Result};
 
 // Re-export commonly used models
 pub use models::{
-    Attachment, AttachmentKind, Category, FavoriteFolder, FavoriteForumOp, FavoriteTopicOp,
-    Forum, ForumId, ForumIdKind, LightPost, Notification, NotificationCounts, NotificationType,
-    Post, PostContent, PostId, SearchTimeRange, ShortMessage, ShortMessagePost, Span, SpanKind,
-    Subject, SubforumFilterOp, Topic, TopicId, TopicOrder, TopicSnapshot, TopicType, User, UserId,
+    Attachment, AttachmentKind, Category, FavoriteFolder, FavoriteForumOp, FavoriteTopicOp, Forum,
+    ForumId, ForumIdKind, LightPost, Notification, NotificationCounts, NotificationType, Post,
+    PostContent, PostId, SearchTimeRange, ShortMessage, ShortMessagePost, Span, SpanKind,
+    SubforumFilterOp, Subject, Topic, TopicId, TopicOrder, TopicSnapshot, TopicType, User, UserId,
     UserName, Vote, VoteState,
 };
 

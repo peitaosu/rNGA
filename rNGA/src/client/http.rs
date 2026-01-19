@@ -146,12 +146,7 @@ impl<'a> HttpExecutor<'a> {
     }
 
     /// Build a request with common headers.
-    fn build_request(
-        &self,
-        method: Method,
-        url: Url,
-        api: &str,
-    ) -> RequestBuilder {
+    fn build_request(&self, method: Method, url: Url, api: &str) -> RequestBuilder {
         let ua = self.config.user_agent_for(api);
         let referer = url.to_string();
 
@@ -170,7 +165,8 @@ impl<'a> HttpExecutor<'a> {
         form: &[(&str, &str)],
         auth: Option<(&str, &str)>,
     ) -> Result<String> {
-        self.post_form_with_format(api, query, form, auth, ResponseFormat::Xml).await
+        self.post_form_with_format(api, query, form, auth, ResponseFormat::Xml)
+            .await
     }
 
     /// Execute a POST request with specific response format.
@@ -183,7 +179,7 @@ impl<'a> HttpExecutor<'a> {
         format: ResponseFormat,
     ) -> Result<String> {
         let url = self.config.resolve_url(api)?;
-        
+
         let mut full_query: Vec<(&str, &str)> = query
             .iter()
             .filter(|(_, v)| !v.is_empty())
@@ -218,32 +214,40 @@ impl<'a> HttpExecutor<'a> {
         form: &[(&str, &str)],
         auth: Option<(&str, &str)>,
     ) -> Result<String> {
-        let text = self.post_form_with_format(api, query, form, auth, ResponseFormat::Xml).await?;
+        let text = self
+            .post_form_with_format(api, query, form, auth, ResponseFormat::Xml)
+            .await?;
         if !text.is_empty() && sxd_document::parser::parse(&text).is_ok() {
             return Ok(text);
         }
 
-        let text = self.post_form_with_format(api, query, form, auth, ResponseFormat::CompactXml).await?;
+        let text = self
+            .post_form_with_format(api, query, form, auth, ResponseFormat::CompactXml)
+            .await?;
         if !text.is_empty() && sxd_document::parser::parse(&text).is_ok() {
             return Ok(text);
         }
 
         if auth.is_some() {
-            let text = self.post_form_with_format(api, query, form, None, ResponseFormat::Xml).await?;
+            let text = self
+                .post_form_with_format(api, query, form, None, ResponseFormat::Xml)
+                .await?;
             if !text.is_empty() && sxd_document::parser::parse(&text).is_ok() {
                 return Ok(text);
             }
         }
 
-        Err(Error::Xml("All retry attempts returned malformed XML".into()))
+        Err(Error::Xml(
+            "All retry attempts returned malformed XML".into(),
+        ))
     }
 
     /// Handle response, decoding with proper charset.
     async fn handle_response(&self, response: Response) -> Result<String> {
         let status = response.status();
-        
+
         let bytes = response.bytes().await.map_err(Error::Network)?;
-        
+
         let text = decode_gb18030(&bytes);
 
         if text.is_empty() && !status.is_success() {
@@ -268,7 +272,7 @@ impl<'a> HttpExecutor<'a> {
         let text = self
             .post_form_with_format(api, query, form, auth, ResponseFormat::Json)
             .await?;
-        
+
         parse_json_response(&text)
     }
 }
@@ -276,18 +280,16 @@ impl<'a> HttpExecutor<'a> {
 /// Parse JSON response from NGA.
 #[allow(dead_code)]
 fn parse_json_response(text: &str) -> Result<serde_json::Value> {
-    
     let mut value: serde_json::Value = serde_json::from_str(&text)
         .or_else(|_| serde_json::from_str(text))
         .map_err(Error::Json)?;
-    
+
     if let Some(data) = value.get_mut("data") {
         Ok(data.take())
     } else {
         Ok(value)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -296,7 +298,7 @@ mod tests {
     #[test]
     fn test_resolve_url() {
         let config = HttpConfig::default();
-        
+
         let url = config.resolve_url("thread.php").unwrap();
         assert!(url.as_str().contains("nga.178.com"));
         assert!(url.as_str().ends_with("thread.php"));

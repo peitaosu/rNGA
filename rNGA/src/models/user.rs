@@ -40,17 +40,17 @@ impl User {
             ..Default::default()
         }
     }
-    
+
     /// Check if this is an anonymous user.
     pub fn is_anonymous(&self) -> bool {
         matches!(self.name, UserName::Anonymous)
     }
-    
+
     /// Check if this user ID is negative.
     pub fn is_negative_id(&self) -> bool {
         self.id.0.starts_with('-')
     }
-    
+
     /// Get the anonymous identifier if this is an anonymous post.
     pub fn anon_id(&self) -> Option<&str> {
         if self.is_negative_id() {
@@ -83,7 +83,7 @@ impl UserName {
     pub fn regular(name: impl Into<String>) -> Self {
         UserName::Regular(name.into())
     }
-    
+
     /// Create a username with nickname.
     pub fn with_nickname(name: impl Into<String>, nickname: impl Into<String>) -> Self {
         UserName::WithNickname {
@@ -91,15 +91,15 @@ impl UserName {
             nickname: nickname.into(),
         }
     }
-    
+
     /// Parse username from NGA format.
     pub fn parse(raw: &str) -> Self {
         let raw = raw.trim();
-        
+
         if raw.starts_with("#anon_") || raw.is_empty() {
             return UserName::Anonymous;
         }
-        
+
         if let Some(paren_start) = raw.find('(') {
             if raw.ends_with(')') {
                 let name = raw[..paren_start].trim().to_owned();
@@ -107,10 +107,10 @@ impl UserName {
                 return UserName::WithNickname { name, nickname };
             }
         }
-        
+
         UserName::Regular(raw.to_owned())
     }
-    
+
     /// Get the display string.
     pub fn display(&self) -> &str {
         match self {
@@ -119,7 +119,7 @@ impl UserName {
             UserName::WithNickname { nickname, .. } => nickname,
         }
     }
-    
+
     /// Get the primary/real username.
     pub fn primary(&self) -> Option<&str> {
         match self {
@@ -138,15 +138,15 @@ pub fn parse_anon_id(raw: &str) -> Option<(i64, &str)> {
     if !raw.starts_with('-') {
         return None;
     }
-    
+
     let parts: Vec<&str> = raw.splitn(2, ',').collect();
     if parts.len() != 2 {
         return None;
     }
-    
+
     let user_id: i64 = parts[0].parse().ok()?;
     let context = parts[1];
-    
+
     Some((user_id, context))
 }
 

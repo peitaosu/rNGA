@@ -2,10 +2,11 @@
 
 use anyhow::Result;
 use clap::Subcommand;
-use rnga::models::*;
+use rust_i18n::t;
 
 use crate::config::{build_authed_client, build_client};
-use crate::output::{print_table, CategoryRow, ForumRow, OutputFormat};
+use crate::handlers::forum as handlers;
+use crate::output::{print_table, OutputFormat};
 
 #[derive(Subcommand)]
 pub enum ForumAction {
@@ -53,7 +54,7 @@ pub async fn handle(action: ForumAction, format: OutputFormat, verbose: bool) ->
 
 async fn list_categories(format: OutputFormat, verbose: bool) -> Result<()> {
     let client = build_client()?;
-    let categories = client.forums().list().await?;
+    let categories = handlers::list_categories(&client).await?;
 
     if verbose {
         for category in &categories {
@@ -61,12 +62,10 @@ async fn list_categories(format: OutputFormat, verbose: bool) -> Result<()> {
                 println!("\n{}", category.name);
                 println!("{}", "=".repeat(category.name.len()));
             }
-            let rows: Vec<ForumRow> = category.forums.iter().map(ForumRow::from).collect();
-            print_table(rows, format);
+            print_table(category.forums.clone(), format);
         }
     } else {
-        let rows: Vec<CategoryRow> = categories.iter().map(CategoryRow::from).collect();
-        print_table(rows, format);
+        print_table(categories, format);
     }
 
     Ok(())
@@ -74,57 +73,34 @@ async fn list_categories(format: OutputFormat, verbose: bool) -> Result<()> {
 
 async fn search_forums(keyword: &str, format: OutputFormat) -> Result<()> {
     let client = build_client()?;
-    let forums = client.forums().search(keyword).await?;
+    let forums = handlers::search_forums(&client, keyword).await?;
 
-    let rows: Vec<ForumRow> = forums.iter().map(ForumRow::from).collect();
-    print_table(rows, format);
+    print_table(forums, format);
 
     Ok(())
 }
 
 async fn list_favorites(format: OutputFormat) -> Result<()> {
     let client = build_authed_client()?;
-    let forums = client.forums().favorites().await?;
+    let forums = handlers::list_favorites(&client).await?;
 
-    let rows: Vec<ForumRow> = forums.iter().map(ForumRow::from).collect();
-    print_table(rows, format);
+    print_table(forums, format);
 
     Ok(())
 }
 
 async fn add_favorite(id: &str, is_stid: bool) -> Result<()> {
     let client = build_authed_client()?;
+    let result = handlers::add_favorite(&client, id, is_stid).await?;
 
-    let forum_id = if is_stid {
-        ForumIdKind::stid(id)
-    } else {
-        ForumIdKind::fid(id)
-    };
-
-    client
-        .forums()
-        .modify_favorite(forum_id, FavoriteForumOp::Add)
-        .await?;
-
-    println!("Added forum {} to favorites", id);
+    println!("{}", t!("added_forum_to_favorites", id = result.id));
     Ok(())
 }
 
 async fn remove_favorite(id: &str, is_stid: bool) -> Result<()> {
     let client = build_authed_client()?;
+    let result = handlers::remove_favorite(&client, id, is_stid).await?;
 
-    let forum_id = if is_stid {
-        ForumIdKind::stid(id)
-    } else {
-        ForumIdKind::fid(id)
-    };
-
-    client
-        .forums()
-        .modify_favorite(forum_id, FavoriteForumOp::Remove)
-        .await?;
-
-    println!("Removed forum {} from favorites", id);
+    println!("{}", t!("removed_forum_from_favorites", id = result.id));
     Ok(())
 }
-

@@ -63,7 +63,7 @@ impl NotificationType {
             _ => NotificationType::Other,
         }
     }
-    
+
     /// Get the API parameter value for fetching.
     pub fn param(&self) -> &'static str {
         match self {
@@ -101,7 +101,7 @@ impl NotificationCounts {
     pub fn total(&self) -> i32 {
         self.replies + self.quotes + self.mentions + self.comments + self.system + self.messages
     }
-    
+
     /// Check if there are any unread notifications.
     pub fn has_unread(&self) -> bool {
         self.total() > 0

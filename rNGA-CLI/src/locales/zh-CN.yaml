@@ -1,0 +1,105 @@
+# Simplified Chinese translations for rNGA CLI
+
+# General
+no_results: "无结果"
+no_command: "未提供命令。使用 --help 查看用法或 --mcp 以 MCP 服务器模式运行。"
+
+# Authentication
+logged_in_as: "已登录用户 %{uid}"
+logged_out: "已登出"
+not_logged_in: "未登录"
+config_file: "配置文件: %{path}"
+authenticated: "已认证: %{status}"
+user_id: "用户ID: %{uid}"
+
+# Time formatting
+time_ago_seconds: "%{count}秒前"
+time_ago_minutes: "%{m}分%{s}秒前"
+time_ago_hours: "%{h}时%{m}分%{s}秒前"
+time_ago_days: "%{d}天%{h}时%{m}分%{s}秒前"
+
+# Time units for recent
+second: "秒"
+seconds: "秒"
+minute: "分钟"
+minutes: "分钟"
+hour: "小时"
+hours: "小时"
+day: "天"
+days: "天"
+week: "周"
+month: "月"
+year: "年"
+
+# Topic commands
+forum_pages_range: "%{name} (第%{start}-%{end}/%{total}页)"
+forum_page_single: "%{name} (第%{page}/%{total}页)"
+topic_tags: "标签: %{tags}"
+topic_by_author: "作者 %{author} | %{date} | %{replies} 回复"
+topic_fetched_all_pages: "已获取全部 %{total} 页"
+topic_page_info: "第%{page}/%{total}页"
+search_results_for: "搜索 '%{keyword}' 的结果 (第%{page}/%{total}页)"
+favorite_topics: "收藏的主题 (第%{page}/%{total}页)"
+added_topic_to_favorites: "已将主题 %{id} 加入收藏"
+removed_topic_from_favorites: "已将主题 %{id} 从收藏中移除"
+recent_content_header: "%{forum} - 最近%{range}内的%{content_type}"
+recent_topics_type: "主题"
+recent_posts_type: "帖子"
+no_topics_in_range: "在指定时间范围内未找到主题"
+no_posts_in_range: "在指定时间范围内未找到帖子"
+found_recent_posts: "找到 %{count} 条最近的帖子"
+found_recent_posts_plural: "找到 %{count} 条最近的帖子"
+
+# User commands
+no_users_found: "未找到用户"
+topics_by_user: "用户 %{uid} 的主题 (第%{page}/%{total}页)"
+posts_by_user: "用户 %{uid} 的帖子 (第%{page}/%{total}页)"
+
+# Forum commands
+added_forum_to_favorites: "已将板块 %{id} 加入收藏"
+removed_forum_from_favorites: "已将板块 %{id} 从收藏中移除"
+
+# Message commands
+conversations: "会话列表 (第%{page}/%{total}页)"
+conversation_with: "与 %{user} 的会话 (第%{page}/%{total}页)"
+message_sent_to: "消息已发送给 %{user}"
+reply_sent: "回复已发送"
+
+# Notification commands
+total_unread: "未读总数: %{count}"
+notifications_list: "%{kind} 通知 (第%{page}/%{total}页)"
+marked_notification_read: "已将通知 %{id} 标记为已读"
+marked_all_notifications_read: "已将所有 %{kind} 通知标记为已读"
+
+# Post commands
+upvoted_post: "已赞帖子 %{id}。得分: %{up} 赞, %{down} 踩"
+downvoted_post: "已踩帖子 %{id}。得分: %{up} 赞, %{down} 踩"
+no_hot_replies: "无热门回复"
+hot_replies_count: "%{count} 条热门回复"
+no_comments: "无评论"
+comments_page: "评论 (第%{page}/%{total}页)"
+posted_reply: "已发布回复 (帖子ID: %{id})"
+posted_comment: "已发布评论"
+
+# Plain print labels
+topic_label: "[主题 %{id}]"
+by_label: "作者 %{author}"
+replies_label: "%{count} 回复"
+uid_label: "[UID: %{id}]"
+score_label: "(得分: %{score})"
+rep_label: "声望: %{rep}"
+posts_label: "帖子: %{posts}"
+registered_label: "注册: %{date}"
+in_topic: "在主题 %{id}"
+topics_count: "(%{count} 个主题)"
+forums_count: "(%{count} 个板块)"
+from_user: "来自 %{user}"
+you_label: "我"
+
+# Notification types
+notif_replies: "回复"
+notif_quotes: "引用"
+notif_mentions: "提及"
+notif_comments: "评论"
+notif_system: "系统"
+notif_messages: "私信"

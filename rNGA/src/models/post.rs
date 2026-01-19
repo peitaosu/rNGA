@@ -187,16 +187,26 @@ mod tests {
 
     #[test]
     fn test_vote_state_net() {
-        let state = VoteState { up: 10, down: 3, user_vote: None };
+        let state = VoteState {
+            up: 10,
+            down: 3,
+            user_vote: None,
+        };
         assert_eq!(state.net(), 7);
     }
 
     #[test]
     fn test_post_is_main() {
-        let main = Post { floor: 0, ..Default::default() };
+        let main = Post {
+            floor: 0,
+            ..Default::default()
+        };
         assert!(main.is_main());
 
-        let reply = Post { floor: 1, ..Default::default() };
+        let reply = Post {
+            floor: 1,
+            ..Default::default()
+        };
         assert!(!reply.is_main());
     }
 }

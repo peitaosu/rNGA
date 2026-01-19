@@ -26,22 +26,21 @@ impl PostApi {
         post_id: impl AsRef<str>,
         vote: Vote,
     ) -> Result<VoteResult> {
-        let xml = self.client.post_authed(
-            "nuke.php",
-            &[
-                ("__lib", "topic_recommend"),
-                ("__act", "add"),
-                ("raw", "3"),
-            ],
-            &[
-                ("tid", topic_id.as_ref()),
-                ("pid", post_id.as_ref()),
-                ("value", vote.param()),
-            ],
-        ).await?;
+        let xml = self
+            .client
+            .post_authed(
+                "nuke.php",
+                &[("__lib", "topic_recommend"), ("__act", "add"), ("raw", "3")],
+                &[
+                    ("tid", topic_id.as_ref()),
+                    ("pid", post_id.as_ref()),
+                    ("value", vote.param()),
+                ],
+            )
+            .await?;
 
         let doc = XmlDocument::parse(&xml)?;
-        
+
         let up = doc.int_or("/root/data/item[1]", 0) as i32;
         let down = doc.int_or("/root/data/item[2]", 0) as i32;
         let user_vote = doc.int_or("/root/data/item[3]", 0);
@@ -65,16 +64,19 @@ impl PostApi {
         topic_id: impl AsRef<str>,
         post_id: impl AsRef<str>,
     ) -> Result<Vec<LightPost>> {
-        let xml = self.client.post(
-            "nuke.php",
-            &[
-                ("__lib", "post_recommend"),
-                ("__act", "get"),
-                ("pid", post_id.as_ref()),
-                ("tid", topic_id.as_ref()),
-            ],
-            &[],
-        ).await?;
+        let xml = self
+            .client
+            .post(
+                "nuke.php",
+                &[
+                    ("__lib", "post_recommend"),
+                    ("__act", "get"),
+                    ("pid", post_id.as_ref()),
+                    ("tid", topic_id.as_ref()),
+                ],
+                &[],
+            )
+            .await?;
 
         parse_hot_replies(&xml)
     }
@@ -87,18 +89,21 @@ impl PostApi {
         page: u32,
     ) -> Result<CommentsResult> {
         let page_str = page.to_string();
-        
-        let xml = self.client.post(
-            "nuke.php",
-            &[
-                ("__lib", "post_comment"),
-                ("__act", "get"),
-                ("pid", post_id.as_ref()),
-                ("tid", topic_id.as_ref()),
-                ("page", &page_str),
-            ],
-            &[],
-        ).await?;
+
+        let xml = self
+            .client
+            .post(
+                "nuke.php",
+                &[
+                    ("__lib", "post_comment"),
+                    ("__act", "get"),
+                    ("pid", post_id.as_ref()),
+                    ("tid", topic_id.as_ref()),
+                    ("page", &page_str),
+                ],
+                &[],
+            )
+            .await?;
 
         parse_comments(&xml)
     }
@@ -116,7 +121,11 @@ impl PostApi {
     }
 
     /// Create a comment on a post.
-    pub fn comment(&self, topic_id: impl Into<TopicId>, post_id: impl Into<PostId>) -> CommentBuilder {
+    pub fn comment(
+        &self,
+        topic_id: impl Into<TopicId>,
+        post_id: impl Into<PostId>,
+    ) -> CommentBuilder {
         CommentBuilder {
             client: self.client.clone(),
             topic_id: topic_id.into(),
@@ -131,35 +140,41 @@ impl PostApi {
         topic_id: impl AsRef<str>,
         post_id: impl AsRef<str>,
     ) -> Result<String> {
-        let xml = self.client.post_authed(
-            "post.php",
-            &[
-                ("action", "quote"),
-                ("tid", topic_id.as_ref()),
-                ("pid", post_id.as_ref()),
-            ],
-            &[],
-        ).await?;
+        let xml = self
+            .client
+            .post_authed(
+                "post.php",
+                &[
+                    ("action", "quote"),
+                    ("tid", topic_id.as_ref()),
+                    ("pid", post_id.as_ref()),
+                ],
+                &[],
+            )
+            .await?;
 
         let doc = XmlDocument::parse(&xml)?;
         let content = doc.string_opt("/root/content").unwrap_or_default();
-        
+
         Ok(html_escape::decode_html_entities(&content).into_owned())
     }
 
     /// Get posts by a specific user.
     pub async fn by_user(&self, user_id: impl AsRef<str>, page: u32) -> Result<UserPostsResult> {
         let page_str = page.to_string();
-        
-        let xml = self.client.post(
-            "thread.php",
-            &[
-                ("searchpost", "1"),
-                ("authorid", user_id.as_ref()),
-                ("page", &page_str),
-            ],
-            &[],
-        ).await?;
+
+        let xml = self
+            .client
+            .post(
+                "thread.php",
+                &[
+                    ("searchpost", "1"),
+                    ("authorid", user_id.as_ref()),
+                    ("page", &page_str),
+                ],
+                &[],
+            )
+            .await?;
 
         parse_user_posts(&xml)
     }
@@ -247,35 +262,49 @@ impl ReplyBuilder {
     /// Execute the request.
     pub async fn send(self) -> Result<ReplyResult> {
         if self.content.trim().is_empty() {
-            return Err(Error::InvalidArgument("Reply content cannot be empty".into()));
+            return Err(Error::InvalidArgument(
+                "Reply content cannot be empty".into(),
+            ));
         }
 
-        let action = if self.quote_post_id.is_some() { "quote" } else { "reply" };
+        let action = if self.quote_post_id.is_some() {
+            "quote"
+        } else {
+            "reply"
+        };
         let anon = if self.anonymous { "1" } else { "" };
         let attachments = self.attachments.join(",");
-        let quote_pid = self.quote_post_id.as_ref().map(|p| p.as_str()).unwrap_or("");
+        let quote_pid = self
+            .quote_post_id
+            .as_ref()
+            .map(|p| p.as_str())
+            .unwrap_or("");
 
-        let xml = self.client.post_authed(
-            "post.php",
-            &[("action", action)],
-            &[
-                ("tid", self.topic_id.as_str()),
-                ("pid", quote_pid),
-                ("post_content", &self.content),
-                ("attachs", &attachments),
-                ("anony", anon),
-            ],
-        ).await?;
+        let xml = self
+            .client
+            .post_authed(
+                "post.php",
+                &[("action", action)],
+                &[
+                    ("tid", self.topic_id.as_str()),
+                    ("pid", quote_pid),
+                    ("post_content", &self.content),
+                    ("attachs", &attachments),
+                    ("anony", anon),
+                ],
+            )
+            .await?;
 
         let doc = XmlDocument::parse(&xml)?;
         let result = doc.string_opt("/root/data/item[1]");
-        
+
         if let Some(pid) = result {
             Ok(ReplyResult {
                 post_id: PostId::new(pid),
             })
         } else {
-            let error = doc.string_opt("/root/data/__MESSAGE")
+            let error = doc
+                .string_opt("/root/data/__MESSAGE")
                 .or_else(|| doc.string_opt("/root/__MESSAGE"))
                 .unwrap_or_else(|| "Unknown error".to_owned());
             Err(Error::nga("post", error))
@@ -308,29 +337,32 @@ impl CommentBuilder {
     /// Execute the request.
     pub async fn send(self) -> Result<CommentResult> {
         if self.content.trim().is_empty() {
-            return Err(Error::InvalidArgument("Comment content cannot be empty".into()));
+            return Err(Error::InvalidArgument(
+                "Comment content cannot be empty".into(),
+            ));
         }
 
-        let xml = self.client.post_authed(
-            "nuke.php",
-            &[
-                ("__lib", "post_comment"),
-                ("__act", "add"),
-            ],
-            &[
-                ("tid", self.topic_id.as_str()),
-                ("pid", self.post_id.as_str()),
-                ("content", &self.content),
-            ],
-        ).await?;
+        let xml = self
+            .client
+            .post_authed(
+                "nuke.php",
+                &[("__lib", "post_comment"), ("__act", "add")],
+                &[
+                    ("tid", self.topic_id.as_str()),
+                    ("pid", self.post_id.as_str()),
+                    ("content", &self.content),
+                ],
+            )
+            .await?;
 
         let doc = XmlDocument::parse(&xml)?;
         let result = doc.string_opt("/root/data");
-        
+
         if result.is_some() {
             Ok(CommentResult { success: true })
         } else {
-            let error = doc.string_opt("/root/__MESSAGE")
+            let error = doc
+                .string_opt("/root/__MESSAGE")
                 .unwrap_or_else(|| "Unknown error".to_owned());
             Err(Error::nga("comment", error))
         }
@@ -343,10 +375,6 @@ pub struct CommentResult {
     /// Whether the comment was posted successfully.
     pub success: bool,
 }
-
-// ============================================================================
-// Parsing helpers
-// ============================================================================
 
 fn parse_hot_replies(xml: &str) -> Result<Vec<LightPost>> {
     let doc = XmlDocument::parse(xml)?;
@@ -372,7 +400,11 @@ fn parse_comments(xml: &str) -> Result<CommentsResult> {
     }
 
     let total_pages = doc.int_or("/root/__ROWS", 0) as u32;
-    let total_pages = if total_pages > 0 { (total_pages + 19) / 20 } else { 1 };
+    let total_pages = if total_pages > 0 {
+        (total_pages + 19) / 20
+    } else {
+        1
+    };
 
     Ok(CommentsResult {
         comments,
@@ -392,7 +424,8 @@ fn parse_light_post(node: &crate::parser::XmlNode<'_>) -> Result<Option<LightPos
     let author_id = attrs.get("authorid").cloned().unwrap_or_default();
     let author = User {
         id: author_id.into(),
-        name: attrs.get("author")
+        name: attrs
+            .get("author")
             .map(|s| UserName::parse(s))
             .unwrap_or_default(),
         ..Default::default()
@@ -405,7 +438,10 @@ fn parse_light_post(node: &crate::parser::XmlNode<'_>) -> Result<Option<LightPos
         id: id.into(),
         author,
         content,
-        post_date: attrs.get("postdate").and_then(|s| s.parse().ok()).unwrap_or(0),
+        post_date: attrs
+            .get("postdate")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
         score: attrs.get("score").and_then(|s| s.parse().ok()).unwrap_or(0),
     }))
 }
@@ -416,20 +452,27 @@ fn parse_user_posts(xml: &str) -> Result<UserPostsResult> {
 
     for node in doc.select("/root/__T/item")? {
         let attrs = node.attrs();
-        
+
         if let (Some(tid), Some(pid)) = (attrs.get("tid"), attrs.get("pid")) {
             posts.push(UserPost {
                 post_id: pid.clone().into(),
                 topic_id: tid.clone().into(),
                 topic_subject: attrs.get("subject").cloned().unwrap_or_default(),
                 content_preview: attrs.get("content").cloned().unwrap_or_default(),
-                post_date: attrs.get("postdate").and_then(|s| s.parse().ok()).unwrap_or(0),
+                post_date: attrs
+                    .get("postdate")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0),
             });
         }
     }
 
     let total_rows = doc.int_or("/root/__ROWS", 0) as u32;
-    let total_pages = if total_rows > 0 { (total_rows + 34) / 35 } else { 1 };
+    let total_pages = if total_rows > 0 {
+        (total_rows + 34) / 35
+    } else {
+        1
+    };
 
     Ok(UserPostsResult {
         posts,

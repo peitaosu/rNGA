@@ -18,7 +18,7 @@ impl PostContent {
     pub fn empty() -> Self {
         Self::default()
     }
-    
+
     /// Create content from plain text.
     pub fn plain(text: impl Into<String>) -> Self {
         let text = text.into();
@@ -28,12 +28,12 @@ impl PostContent {
             parse_error: None,
         }
     }
-    
+
     /// Check if content is empty.
     pub fn is_empty(&self) -> bool {
         self.spans.is_empty() && self.raw.is_empty()
     }
-    
+
     /// Extract plain text from all spans.
     pub fn to_plain_text(&self) -> String {
         self.spans.iter().map(|s| s.to_plain_text()).collect()
@@ -74,28 +74,28 @@ impl Span {
             kind: SpanKind::Plain { text: text.into() },
         }
     }
-    
+
     /// Create a line break span.
     pub fn line_break() -> Self {
         Self {
             kind: SpanKind::LineBreak,
         }
     }
-    
+
     /// Create a sticker span.
     pub fn sticker(name: impl Into<String>) -> Self {
         Self {
             kind: SpanKind::Sticker { name: name.into() },
         }
     }
-    
+
     /// Create a divider span.
     pub fn divider(spans: Vec<Span>) -> Self {
         Self {
             kind: SpanKind::Divider { spans },
         }
     }
-    
+
     /// Create a tagged span.
     pub fn tagged(
         tag: impl Into<String>,
@@ -112,7 +112,7 @@ impl Span {
             },
         }
     }
-    
+
     /// Extract plain text from this span.
     pub fn to_plain_text(&self) -> String {
         match &self.kind {
@@ -123,17 +123,17 @@ impl Span {
             SpanKind::Tagged { spans, .. } => spans.iter().map(|s| s.to_plain_text()).collect(),
         }
     }
-    
+
     /// Check if this is a plain text span.
     pub fn is_plain(&self) -> bool {
         matches!(self.kind, SpanKind::Plain { .. })
     }
-    
+
     /// Check if this is a tagged span with the given tag.
     pub fn is_tag(&self, tag: &str) -> bool {
         matches!(&self.kind, SpanKind::Tagged { tag: t, .. } if t == tag)
     }
-    
+
     /// Get the tag name if this is a tagged span.
     pub fn tag_name(&self) -> Option<&str> {
         match &self.kind {
@@ -141,7 +141,7 @@ impl Span {
             _ => None,
         }
     }
-    
+
     /// Get the first attribute if this is a tagged span.
     pub fn first_attr(&self) -> Option<&str> {
         match &self.kind {
@@ -165,7 +165,7 @@ impl Subject {
     pub fn new(tags: Vec<String>, content: String) -> Self {
         Self { tags, content }
     }
-    
+
     /// Create from plain text.
     pub fn plain(text: impl Into<String>) -> Self {
         Self {
@@ -173,7 +173,7 @@ impl Subject {
             content: text.into(),
         }
     }
-    
+
     /// Full display text including tags.
     pub fn full_text(&self) -> String {
         if self.tags.is_empty() {

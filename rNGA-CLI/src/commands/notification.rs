@@ -3,10 +3,11 @@
 use anyhow::Result;
 use clap::Subcommand;
 use colored::Colorize;
-use rnga::models::*;
+use rust_i18n::t;
 
 use crate::config::build_authed_client;
-use crate::output::{print_table, NotificationCountRow, NotificationRow, OutputFormat};
+use crate::handlers::notification as handlers;
+use crate::output::{print_table, OutputFormat};
 
 #[derive(Subcommand)]
 pub enum NotificationAction {
@@ -38,7 +39,11 @@ pub enum NotificationAction {
     },
 }
 
-pub async fn handle(action: NotificationAction, format: OutputFormat, _verbose: bool) -> Result<()> {
+pub async fn handle(
+    action: NotificationAction,
+    format: OutputFormat,
+    _verbose: bool,
+) -> Result<()> {
     match action {
         NotificationAction::Counts => show_counts(format).await,
         NotificationAction::List { kind, page } => list_notifications(&kind, page, format).await,
@@ -49,104 +54,59 @@ pub async fn handle(action: NotificationAction, format: OutputFormat, _verbose: 
 
 async fn show_counts(format: OutputFormat) -> Result<()> {
     let client = build_authed_client()?;
-    let counts = client.notifications().counts().await?;
+    let counts = handlers::get_counts(&client).await?;
 
-    let rows = vec![
-        NotificationCountRow {
-            kind: "Replies".to_string(),
-            count: counts.replies,
-        },
-        NotificationCountRow {
-            kind: "Quotes".to_string(),
-            count: counts.quotes,
-        },
-        NotificationCountRow {
-            kind: "Mentions".to_string(),
-            count: counts.mentions,
-        },
-        NotificationCountRow {
-            kind: "Comments".to_string(),
-            count: counts.comments,
-        },
-        NotificationCountRow {
-            kind: "System".to_string(),
-            count: counts.system,
-        },
-        NotificationCountRow {
-            kind: "Messages".to_string(),
-            count: counts.messages,
-        },
-    ];
-
-    print_table(rows, format);
+    print_table(counts.to_rows(), format);
 
     if matches!(format, OutputFormat::Plain) {
-        let total = counts.total();
-        if total > 0 {
-            println!("\n{}", format!("Total unread: {}", total).yellow());
+        if counts.total > 0 {
+            println!(
+                "\n{}",
+                t!("total_unread", count = counts.total)
+                    .to_string()
+                    .yellow()
+            );
         }
     }
 
     Ok(())
 }
 
-fn parse_notification_type(kind: &str) -> NotificationType {
-    match kind.to_lowercase().as_str() {
-        "reply" | "replies" => NotificationType::Reply,
-        "quote" | "quotes" => NotificationType::Quote,
-        "mention" | "mentions" | "at" => NotificationType::Mention,
-        "comment" | "comments" => NotificationType::Comment,
-        "system" => NotificationType::System,
-        "message" | "messages" | "pm" => NotificationType::Message,
-        _ => NotificationType::Reply,
-    }
-}
-
 async fn list_notifications(kind: &str, page: u32, format: OutputFormat) -> Result<()> {
     let client = build_authed_client()?;
-    let noti_type = parse_notification_type(kind);
-
-    let result = client
-        .notifications()
-        .list(noti_type)
-        .page(page)
-        .send()
-        .await?;
+    let result = handlers::list_notifications(&client, kind, page).await?;
 
     if matches!(format, OutputFormat::Plain) {
         println!(
-            "{:?} notifications (page {}/{})\n",
-            noti_type, page, result.total_pages
+            "{}\n",
+            t!(
+                "notifications_list",
+                kind = result.kind,
+                page = page,
+                total = result.total_pages
+            )
         );
     }
 
-    let rows: Vec<NotificationRow> = result.notifications.iter().map(NotificationRow::from).collect();
-    print_table(rows, format);
-
+    print_table(result.notifications, format);
     Ok(())
 }
 
 async fn mark_read(id: &str) -> Result<()> {
     let client = build_authed_client()?;
-    client.notifications().mark_read(id).await?;
+    let result = handlers::mark_read(&client, id).await?;
 
-    println!("{} Marked notification {} as read", "✓".green(), id);
-
+    println!("{}", t!("marked_notification_read", id = result.id));
     Ok(())
 }
 
 async fn mark_all_read(kind: &str) -> Result<()> {
     let client = build_authed_client()?;
-    let noti_type = parse_notification_type(kind);
-
-    client.notifications().mark_all_read(noti_type).await?;
+    let result = handlers::mark_all_read(&client, kind).await?;
 
     println!(
-        "{} Marked all {:?} notifications as read",
-        "✓".green(),
-        noti_type
+        "{}",
+        t!("marked_all_notifications_read", kind = result.kind)
     );
-
     Ok(())
 }
-

@@ -15,5 +15,7 @@ pub use ids::{ForumId, PostId, TopicId, UserId};
 pub use message::{ShortMessage, ShortMessagePost};
 pub use notification::{Notification, NotificationCounts, NotificationType};
 pub use post::{Attachment, AttachmentKind, LightPost, Post, Vote, VoteState};
-pub use topic::{FavoriteFolder, FavoriteTopicOp, SearchTimeRange, Topic, TopicOrder, TopicSnapshot, TopicType};
+pub use topic::{
+    FavoriteFolder, FavoriteTopicOp, SearchTimeRange, Topic, TopicOrder, TopicSnapshot, TopicType,
+};
 pub use user::{User, UserName};
