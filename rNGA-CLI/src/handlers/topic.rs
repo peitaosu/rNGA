@@ -272,6 +272,7 @@ pub struct ReadTopicOptions {
     pub author: Option<String>,
     pub fetch_all: bool,
     pub concurrency: usize,
+    pub range: Option<String>,
 }
 
 /// Options for searching topics.
@@ -287,7 +288,6 @@ pub struct SearchTopicsOptions {
 pub struct RecentTopicsOptions {
     pub is_stid: bool,
     pub range: String,
-    pub page: u32,
     pub order: String,
     pub with_posts: bool,
     pub concurrency: usize,
@@ -445,15 +445,24 @@ pub async fn list_topics(
     })
 }
 
-/// Read topic details with optional all-pages concurrent fetching.
+/// Read topic details.
 pub async fn read_topic(
     client: &NGAClient,
     topic_id: &str,
     options: ReadTopicOptions,
 ) -> Result<TopicDetailsResult> {
-    let page = options.page.max(1);
+    use chrono::Local;
 
-    let mut builder = client.topics().details(topic_id).page(page);
+    let cutoff_time = if let Some(ref range) = options.range {
+        let now = Local::now().timestamp();
+        let (time_range_seconds, _) =
+            parse_time_range(range).unwrap_or((3600, "hour".to_string()));
+        Some(now - time_range_seconds)
+    } else {
+        None
+    };
+
+    let mut builder = client.topics().details(topic_id).page(1);
     if let Some(ref author_id) = options.author {
         builder = builder.author(author_id.clone());
     }
@@ -470,7 +479,60 @@ pub async fn read_topic(
     let post_date = topic.post_date;
     let total_pages = first_result.total_pages;
 
-    if !options.fetch_all || first_result.total_pages <= 1 {
+    if !options.fetch_all && total_pages == 1 {
+        let posts: Vec<PostInfo> = if let Some(cutoff) = cutoff_time {
+            first_result
+                .posts
+                .iter()
+                .filter(|p| p.post_date >= cutoff)
+                .map(PostInfo::from)
+                .collect()
+        } else {
+            first_result.posts.iter().map(PostInfo::from).collect()
+        };
+
+        return Ok(TopicDetailsResult {
+            forum_name,
+            subject,
+            tags,
+            author,
+            author_id,
+            replies,
+            post_date,
+            page: options.page,
+            total_pages,
+            posts,
+        });
+    }
+
+    if !options.fetch_all {
+        let page = if cutoff_time.is_some() {
+            total_pages.max(1)
+        } else {
+            options.page.max(1)
+        };
+
+        let page_result = if page == 1 {
+            first_result
+        } else {
+            let mut builder = client.topics().details(topic_id).page(page);
+            if let Some(ref aid) = options.author {
+                builder = builder.author(aid.clone());
+            }
+            builder.send().await?
+        };
+
+        let posts: Vec<PostInfo> = if let Some(cutoff) = cutoff_time {
+            page_result
+                .posts
+                .iter()
+                .filter(|p| p.post_date >= cutoff)
+                .map(PostInfo::from)
+                .collect()
+        } else {
+            page_result.posts.iter().map(PostInfo::from).collect()
+        };
+
         return Ok(TopicDetailsResult {
             forum_name,
             subject,
@@ -481,44 +543,77 @@ pub async fn read_topic(
             post_date,
             page,
             total_pages,
-            posts: first_result.posts.iter().map(PostInfo::from).collect(),
+            posts,
         });
     }
 
-    let concurrency = effective_concurrency(options.concurrency);
-    let semaphore = Arc::new(Semaphore::new(concurrency));
-    let client = Arc::new(client.clone());
-    let author_clone = options.author.clone();
+    let mut all_posts: Vec<Post>;
 
-    let pages_to_fetch: Vec<u32> = (2..=first_result.total_pages).collect();
+    if cutoff_time.is_some() {
+        all_posts = Vec::new();
+        let mut current_page = total_pages;
 
-    let fetch_results: Vec<_> = stream::iter(pages_to_fetch)
-        .map(|p| {
-            let sem = semaphore.clone();
-            let client = client.clone();
-            let author_id = author_clone.clone();
-            let tid = topic_id.to_string();
-            async move {
-                let _permit = sem.acquire().await.unwrap();
-                let mut builder = client.topics().details(&tid).page(p);
-                if let Some(ref aid) = author_id {
+        loop {
+            let details = if current_page == 1 {
+                first_result.clone()
+            } else {
+                let mut builder = client.topics().details(topic_id).page(current_page);
+                if let Some(ref aid) = options.author {
                     builder = builder.author(aid.clone());
                 }
-                (p, builder.send().await)
+                builder.send().await?
+            };
+
+            let mut found_any_recent = false;
+            for post in details.posts {
+                if post.post_date >= cutoff_time.unwrap() {
+                    found_any_recent = true;
+                    all_posts.push(post);
+                }
             }
-        })
-        .buffer_unordered(concurrency)
-        .collect()
-        .await;
 
-    let mut all_posts = first_result.posts;
+            if !found_any_recent || current_page == 1 {
+                break;
+            }
 
-    let mut sorted_results: Vec<_> = fetch_results.into_iter().collect();
-    sorted_results.sort_by_key(|(p, _)| *p);
+            current_page -= 1;
+        }
+    } else {
+        let concurrency = effective_concurrency(options.concurrency);
+        let semaphore = Arc::new(Semaphore::new(concurrency));
+        let client = Arc::new(client.clone());
+        let author_clone = options.author.clone();
 
-    for (_page_num, result) in sorted_results {
-        if let Ok(page_result) = result {
-            all_posts.extend(page_result.posts);
+        let pages_to_fetch: Vec<u32> = (2..=total_pages).collect();
+
+        let fetch_results: Vec<_> = stream::iter(pages_to_fetch)
+            .map(|p| {
+                let sem = semaphore.clone();
+                let client = client.clone();
+                let author_id = author_clone.clone();
+                let tid = topic_id.to_string();
+                async move {
+                    let _permit = sem.acquire().await.unwrap();
+                    let mut builder = client.topics().details(&tid).page(p);
+                    if let Some(ref aid) = author_id {
+                        builder = builder.author(aid.clone());
+                    }
+                    (p, builder.send().await)
+                }
+            })
+            .buffer_unordered(concurrency)
+            .collect()
+            .await;
+
+        all_posts = first_result.posts;
+
+        let mut sorted_results: Vec<_> = fetch_results.into_iter().collect();
+        sorted_results.sort_by_key(|(p, _)| *p);
+
+        for (_page_num, result) in sorted_results {
+            if let Ok(page_result) = result {
+                all_posts.extend(page_result.posts);
+            }
         }
     }
 
@@ -653,38 +748,61 @@ pub async fn recent_topics(
 
     let order_by = parse_order(&options.order);
 
-    let result = client
-        .topics()
-        .list(id)
-        .page(options.page)
-        .order(order_by)
-        .send()
-        .await?;
+    let mut current_page = 1;
+    let mut all_recent_topics: Vec<Topic> = Vec::new();
+    let mut forum_name: Option<String> = None;
 
-    let forum_name = result.forum.as_ref().map(|f| f.name.clone());
+    loop {
+        let result = client
+            .topics()
+            .list(id.clone())
+            .page(current_page)
+            .order(order_by)
+            .send()
+            .await?;
 
-    let recent_topics_raw: Vec<Topic> = result
-        .topics
-        .into_iter()
-        .filter(|t| {
+        if forum_name.is_none() {
+            forum_name = result.forum.as_ref().map(|f| f.name.clone());
+        }
+
+        let mut found_any_recent = false;
+        let mut all_older_than_cutoff = true;
+
+        for topic in result.topics {
             let relevant_time = match order_by {
-                TopicOrder::PostDate => t.post_date,
-                _ => t.last_post_date,
+                TopicOrder::PostDate => topic.post_date,
+                _ => topic.last_post_date,
             };
-            relevant_time >= cutoff_time
-        })
-        .collect();
+
+            if relevant_time >= cutoff_time {
+                all_recent_topics.push(topic);
+                found_any_recent = true;
+            } else {
+                all_older_than_cutoff = false;
+            }
+        }
+
+        if all_older_than_cutoff || current_page >= result.total_pages {
+            break;
+        }
+
+        if !found_any_recent {
+            break;
+        }
+
+        current_page += 1;
+    }
 
     if !options.with_posts {
         return Ok(RecentResult {
             forum_name,
             range_display,
-            topics: recent_topics_raw.iter().map(TopicInfo::from).collect(),
+            topics: all_recent_topics.iter().map(TopicInfo::from).collect(),
             posts: Vec::new(),
         });
     }
 
-    if recent_topics_raw.is_empty() {
+    if all_recent_topics.is_empty() {
         return Ok(RecentResult {
             forum_name,
             range_display,
@@ -697,7 +815,7 @@ pub async fn recent_topics(
     let semaphore = Arc::new(Semaphore::new(concurrency));
     let client = Arc::new(client.clone());
 
-    let fetch_results: Vec<_> = stream::iter(recent_topics_raw.iter().cloned())
+    let fetch_results: Vec<_> = stream::iter(all_recent_topics.iter().cloned())
         .map(|topic| {
             let sem = semaphore.clone();
             let client = client.clone();
@@ -711,7 +829,7 @@ pub async fn recent_topics(
         .await;
 
     let mut all_posts: Vec<RecentPostInfo> = Vec::new();
-    for (topic, result) in recent_topics_raw.iter().zip(fetch_results.into_iter()) {
+    for (topic, result) in all_recent_topics.iter().zip(fetch_results.into_iter()) {
         if let Ok(posts) = result {
             all_posts.extend(posts.into_iter().map(
                 |(post_type, post_id, floor, author_name, author_id, content, post_date, score)| {
@@ -737,7 +855,7 @@ pub async fn recent_topics(
     Ok(RecentResult {
         forum_name,
         range_display,
-        topics: recent_topics_raw.iter().map(TopicInfo::from).collect(),
+        topics: all_recent_topics.iter().map(TopicInfo::from).collect(),
         posts: all_posts,
     })
 }
@@ -750,90 +868,99 @@ async fn fetch_topic_posts(
     let mut results = Vec::new();
     let mut posts_to_check_comments: Vec<Post> = Vec::new();
 
-    let details = client
+    let first_page = client
         .topics()
         .details(topic.id.clone())
         .page(1)
         .send()
         .await?;
 
-    for post in details.posts {
-        if post.comment_count > 0 {
-            posts_to_check_comments.push(post.clone());
-        }
-        if post.post_date >= cutoff_time {
-            results.push((
-                "post".to_string(),
-                post.id.to_string(),
-                format!("#{}", post.floor),
-                post.author.name.display().to_string(),
-                post.author.id.to_string(),
-                post.content.to_plain_text(),
-                post.post_date,
-                post.score,
-            ));
-        }
-    }
+    let total_pages = first_page.total_pages;
 
-    if details.total_pages > 1 {
-        if let Ok(last_page_details) = client
-            .topics()
-            .details(topic.id.clone())
-            .page(details.total_pages)
-            .send()
-            .await
-        {
-            for post in last_page_details.posts {
+    let mut current_page = total_pages;
+    
+    loop {
+        let details = if current_page == 1 {
+            first_page.clone()
+        } else {
+            client
+                .topics()
+                .details(topic.id.clone())
+                .page(current_page)
+                .send()
+                .await?
+        };
+
+        let mut found_any_recent = false;
+
+        for post in details.posts {
+            if post.post_date >= cutoff_time {
+                found_any_recent = true;
+                
                 if post.comment_count > 0 {
                     posts_to_check_comments.push(post.clone());
                 }
-                if post.post_date >= cutoff_time {
-                    results.push((
-                        "post".to_string(),
-                        post.id.to_string(),
-                        format!("#{}", post.floor),
-                        post.author.name.display().to_string(),
-                        post.author.id.to_string(),
-                        post.content.to_plain_text(),
-                        post.post_date,
-                        post.score,
-                    ));
-                }
+                
+                results.push((
+                    "post".to_string(),
+                    post.id.to_string(),
+                    format!("#{}", post.floor),
+                    post.author.name.display().to_string(),
+                    post.author.id.to_string(),
+                    post.content.to_plain_text(),
+                    post.post_date,
+                    post.score,
+                ));
             }
         }
+
+        if !found_any_recent || current_page == 1 {
+            break;
+        }
+
+        current_page -= 1;
     }
 
     for post in posts_to_check_comments {
-        if let Ok(comments_result) = client.posts().comments(&topic.id, &post.id, 1).await {
-            let last_page = comments_result.total_pages;
-
-            let comments_to_check = if last_page > 1 {
-                if let Ok(last_comments) = client
-                    .posts()
-                    .comments(&topic.id, &post.id, last_page)
-                    .await
-                {
-                    last_comments.comments
+        if let Ok(first_comments) = client.posts().comments(&topic.id, &post.id, 1).await {
+            let total_comment_pages = first_comments.total_pages;
+            
+            let mut comment_page = total_comment_pages;
+            
+            loop {
+                let comments_result = if comment_page == 1 {
+                    first_comments.clone()
                 } else {
-                    comments_result.comments
-                }
-            } else {
-                comments_result.comments
-            };
+                    match client.posts().comments(&topic.id, &post.id, comment_page).await {
+                        Ok(r) => r,
+                        Err(_) => break,
+                    }
+                };
 
-            for comment in comments_to_check {
-                if comment.post_date >= cutoff_time {
-                    results.push((
-                        "comment".to_string(),
-                        post.id.to_string(),
-                        format!("#{} comment", post.floor),
-                        comment.author.name.display().to_string(),
-                        comment.author.id.to_string(),
-                        comment.content.to_plain_text(),
-                        comment.post_date,
-                        comment.score,
-                    ));
+                let mut found_any_recent_comment = false;
+
+                for comment in comments_result.comments {
+                    if comment.post_date >= cutoff_time {
+                        found_any_recent_comment = true;
+                        
+                        results.push((
+                            "comment".to_string(),
+                            post.id.to_string(),
+                            format!("#{} comment", post.floor),
+                            comment.author.name.display().to_string(),
+                            comment.author.id.to_string(),
+                            comment.content.to_plain_text(),
+                            comment.post_date,
+                            comment.score,
+                        ));
+                    }
                 }
+
+                if !found_any_recent_comment || comment_page == 1 {
+                    break;
+                }
+
+                comment_page -= 1;
             }
         }
     }

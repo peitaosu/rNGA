@@ -13,6 +13,8 @@ pub enum OutputFormat {
     Table,
     /// JSON format
     Json,
+    /// TOON format
+    Toon,
     /// Plain text format
     #[default]
     Plain,
@@ -99,6 +101,10 @@ pub fn print_table<T: TableRow + Serialize + PlainPrint>(items: Vec<T>, format: 
                 "{}",
                 serde_json::to_string_pretty(&items).unwrap_or_default()
             );
+        }
+        OutputFormat::Toon => {
+            let json_value = serde_json::to_value(&items).unwrap_or_default();
+            println!("{}", toon_format::encode_default(&json_value).unwrap_or_default());
         }
         OutputFormat::Table => {
             if items.is_empty() {

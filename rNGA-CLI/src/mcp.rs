@@ -28,8 +28,10 @@ impl NGAMCPServer {
         config::build_client().map_err(|e| McpError::internal_error(e.to_string(), None))
     }
 
-    fn to_json<T: Serialize>(value: &T) -> Result<String, McpError> {
-        serde_json::to_string_pretty(value)
+    fn to_toon<T: Serialize>(value: &T) -> Result<String, McpError> {
+        let json_value =
+            serde_json::to_value(value).map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        toon_format::encode_default(&json_value)
             .map_err(|e| McpError::internal_error(e.to_string(), None))
     }
 
@@ -74,6 +76,8 @@ pub struct TopicReadParams {
     /// Fetch all pages
     #[serde(default)]
     pub all: bool,
+    /// Time range filter (e.g., 1h, 30m, 1d)
+    pub range: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -103,9 +107,6 @@ pub struct RecentTopicsParams {
     /// Time range (e.g., 1h, 30m, 1d)
     #[serde(default = "default_range")]
     pub range: String,
-    /// Page number (default: 1)
-    #[serde(default = "default_page")]
-    pub page: u32,
     /// Include individual posts/comments
     #[serde(default)]
     pub with_posts: bool,
@@ -155,7 +156,7 @@ impl NGAMCPServer {
         let categories = forum::list_categories(&client)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&categories)?)
+        Self::ok(Self::to_toon(&categories)?)
     }
 
     #[tool(description = "Search forums by name")]
@@ -167,7 +168,7 @@ impl NGAMCPServer {
         let forums = forum::search_forums(&client, &params.0.keyword)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&forums)?)
+        Self::ok(Self::to_toon(&forums)?)
     }
 
     #[tool(description = "List topics in a forum with optional multi-page fetching")]
@@ -186,7 +187,7 @@ impl NGAMCPServer {
         let result = topic::list_topics(&client, &params.0.forum_id, options)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&result)?)
+        Self::ok(Self::to_toon(&result)?)
     }
 
     #[tool(description = "Read a topic with its posts, optionally fetching all pages")]
@@ -200,11 +201,12 @@ impl NGAMCPServer {
             author: params.0.author,
             fetch_all: params.0.all,
             concurrency: 4,
+            range: params.0.range,
         };
         let result = topic::read_topic(&client, &params.0.topic_id, options)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&result)?)
+        Self::ok(Self::to_toon(&result)?)
     }
 
     #[tool(description = "Search topics in a forum by keyword")]
@@ -221,7 +223,7 @@ impl NGAMCPServer {
         let result = topic::search_topics(&client, &params.0.forum_id, &params.0.keyword, options)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&result)?)
+        Self::ok(Self::to_toon(&result)?)
     }
 
     #[tool(description = "Get recent topics/posts in a forum within a time range")]
@@ -233,7 +235,6 @@ impl NGAMCPServer {
         let options = topic::RecentTopicsOptions {
             is_stid: params.0.stid,
             range: params.0.range,
-            page: params.0.page,
             order: "lastpost".to_string(),
             with_posts: params.0.with_posts,
             concurrency: 4,
@@ -241,7 +242,7 @@ impl NGAMCPServer {
         let result = topic::recent_topics(&client, &params.0.forum_id, options)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&result)?)
+        Self::ok(Self::to_toon(&result)?)
     }
 
     #[tool(description = "Get hot replies for a post")]
@@ -253,7 +254,7 @@ impl NGAMCPServer {
         let replies = post::hot_replies(&client, &params.0.topic_id, &params.0.post_id)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&replies)?)
+        Self::ok(Self::to_toon(&replies)?)
     }
 
     #[tool(description = "Get comments on a post")]
@@ -270,7 +271,7 @@ impl NGAMCPServer {
         )
         .await
         .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&result)?)
+        Self::ok(Self::to_toon(&result)?)
     }
 
     #[tool(description = "Get user profile by ID")]
@@ -279,7 +280,7 @@ impl NGAMCPServer {
         let user_info = user::get_user(&client, &params.0.user_id)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&user_info)?)
+        Self::ok(Self::to_toon(&user_info)?)
     }
 
     #[tool(description = "Get user profile by username")]
@@ -291,7 +292,7 @@ impl NGAMCPServer {
         let user_info = user::get_user_by_name(&client, &params.0.username)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&user_info)?)
+        Self::ok(Self::to_toon(&user_info)?)
     }
 
     #[tool(description = "Search users by keyword")]
@@ -303,7 +304,7 @@ impl NGAMCPServer {
         let results = user::search_users(&client, &params.0.keyword)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Self::ok(Self::to_json(&results)?)
+        Self::ok(Self::to_toon(&results)?)
     }
 }
 

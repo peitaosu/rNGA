@@ -50,6 +50,9 @@ pub enum TopicAction {
         /// Fetch all pages
         #[arg(long)]
         all: bool,
+        /// Time range filter (e.g., 1h, 30m, 1d)
+        #[arg(short = 'r', long)]
+        range: Option<String>,
         /// Number of concurrent requests
         #[arg(short = 'j', long, default_value = "4")]
         concurrency: usize,
@@ -113,9 +116,6 @@ pub enum TopicAction {
         /// Time range: second, minute, hour, day, week, month, year
         #[arg(short, long, default_value = "1h")]
         range: String,
-        /// Page number
-        #[arg(short, long, default_value = "1")]
-        page: u32,
         /// Sort order: lastpost, postdate, recommend
         #[arg(short, long, default_value = "lastpost")]
         order: String,
@@ -143,8 +143,9 @@ pub async fn handle(action: TopicAction, format: OutputFormat, verbose: bool) ->
             page,
             author,
             all,
+            range,
             concurrency,
-        } => read_topic(&topic_id, page, author, all, concurrency, format, verbose).await,
+        } => read_topic(&topic_id, page, author, all, range, concurrency, format, verbose).await,
         TopicAction::Search {
             forum_id,
             keyword,
@@ -160,7 +161,6 @@ pub async fn handle(action: TopicAction, format: OutputFormat, verbose: bool) ->
             forum_id,
             stid,
             range,
-            page,
             order,
             with_posts,
             concurrency,
@@ -169,7 +169,6 @@ pub async fn handle(action: TopicAction, format: OutputFormat, verbose: bool) ->
                 &forum_id,
                 stid,
                 &range,
-                page,
                 &order,
                 with_posts,
                 concurrency,
@@ -238,6 +237,7 @@ async fn read_topic(
     page: u32,
     author: Option<String>,
     fetch_all: bool,
+    range: Option<String>,
     concurrency: usize,
     format: OutputFormat,
     _verbose: bool,
@@ -249,6 +249,7 @@ async fn read_topic(
         author,
         fetch_all,
         concurrency,
+        range,
     };
 
     let result = handlers::read_topic(&client, topic_id, options).await?;
@@ -372,7 +373,6 @@ async fn recent_topics(
     forum_id: &str,
     is_stid: bool,
     range: &str,
-    page: u32,
     order: &str,
     with_posts: bool,
     concurrency: usize,
@@ -383,7 +383,6 @@ async fn recent_topics(
     let options = RecentTopicsOptions {
         is_stid,
         range: range.to_string(),
-        page,
         order: order.to_string(),
         with_posts,
         concurrency,
@@ -441,6 +440,10 @@ async fn recent_topics(
     match format {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(&result.posts)?);
+        }
+        OutputFormat::Toon => {
+            let json_value = serde_json::to_value(&result.posts)?;
+            println!("{}", toon_format::encode_default(&json_value).unwrap_or_default());
         }
         OutputFormat::Table | OutputFormat::Plain => {
             let mut posts_by_topic: HashMap<String, Vec<&handlers::RecentPostInfo>> =
