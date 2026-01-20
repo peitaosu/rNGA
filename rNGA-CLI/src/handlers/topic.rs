@@ -505,12 +505,8 @@ pub async fn read_topic(
         });
     }
 
-    if !options.fetch_all {
-        let page = if cutoff_time.is_some() {
-            total_pages.max(1)
-        } else {
-            options.page.max(1)
-        };
+    if !options.fetch_all && cutoff_time.is_none() {
+        let page = options.page.max(1);
 
         let page_result = if page == 1 {
             first_result
@@ -520,17 +516,6 @@ pub async fn read_topic(
                 builder = builder.author(aid.clone());
             }
             builder.send().await?
-        };
-
-        let posts: Vec<PostInfo> = if let Some(cutoff) = cutoff_time {
-            page_result
-                .posts
-                .iter()
-                .filter(|p| p.post_date >= cutoff)
-                .map(PostInfo::from)
-                .collect()
-        } else {
-            page_result.posts.iter().map(PostInfo::from).collect()
         };
 
         return Ok(TopicDetailsResult {
@@ -543,7 +528,7 @@ pub async fn read_topic(
             post_date,
             page,
             total_pages,
-            posts,
+            posts: page_result.posts.iter().map(PostInfo::from).collect(),
         });
     }
 
@@ -777,7 +762,6 @@ pub async fn recent_topics(
             if relevant_time >= cutoff_time {
                 all_recent_topics.push(topic);
                 found_any_recent = true;
-            } else {
                 all_older_than_cutoff = false;
             }
         }
