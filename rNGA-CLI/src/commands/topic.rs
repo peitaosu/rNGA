@@ -502,18 +502,12 @@ async fn recent_topics(
                         }
                     );
 
-                    let preview = if post.content.len() > 200 {
-                        format!("{}...", post.content.chars().take(200).collect::<String>())
-                    } else {
-                        post.content.clone()
-                    };
-
                     let indent = if post.post_type == "comment" {
                         "          "
                     } else {
                         "        "
                     };
-                    for line in preview.lines() {
+                    for line in post.content.lines() {
                         if !line.trim().is_empty() {
                             println!("{}{}", indent, line);
                         }

@@ -805,7 +805,8 @@ pub async fn recent_topics(
             let client = client.clone();
             async move {
                 let _permit = sem.acquire().await.unwrap();
-                fetch_topic_posts(&client, &topic, cutoff_time).await
+                let result = fetch_topic_posts(&client, &topic, cutoff_time).await;
+                (topic, result)
             }
         })
         .buffer_unordered(concurrency)
@@ -813,7 +814,7 @@ pub async fn recent_topics(
         .await;
 
     let mut all_posts: Vec<RecentPostInfo> = Vec::new();
-    for (topic, result) in all_recent_topics.iter().zip(fetch_results.into_iter()) {
+    for (topic, result) in fetch_results {
         if let Ok(posts) = result {
             all_posts.extend(posts.into_iter().map(
                 |(post_type, post_id, floor, author_name, author_id, content, post_date, score)| {
