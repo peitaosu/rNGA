@@ -1,6 +1,6 @@
 [package]
 name = "rnga-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Command-Line Interface and MCP Server for NGA"
 license = "MIT"
@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 # NGA client library
-rnga = { version = "0.1.0", path = "../rNGA" }
+rnga = { version = "0.2.0", path = "../rNGA" }
 
 # CLI framework
 clap = { version = "4", features = ["derive", "env"] }
