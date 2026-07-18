@@ -1,12 +1,13 @@
 //! Notification handlers.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use colored::Colorize;
 use rnga::models::*;
 use rnga::NGAClient;
 use rust_i18n::t;
 use serde::Serialize;
 
+use crate::handlers::meta::ResponseMeta;
 use crate::output::{format_relative_time, PlainPrint, TableRow};
 
 /// Notification counts.
@@ -137,6 +138,7 @@ pub struct NotificationListResult {
     pub page: u32,
     pub total_pages: u32,
     pub notifications: Vec<NotificationInfo>,
+    pub meta: ResponseMeta,
 }
 
 /// Mark read result.
@@ -154,21 +156,25 @@ pub struct MarkAllReadResult {
 }
 
 /// Parse notification type from string.
-pub fn parse_notification_type(kind: &str) -> NotificationType {
+pub fn parse_notification_type(kind: &str) -> Result<NotificationType> {
     match kind.to_lowercase().as_str() {
-        "reply" | "replies" => NotificationType::Reply,
-        "quote" | "quotes" => NotificationType::Quote,
-        "mention" | "mentions" | "at" => NotificationType::Mention,
-        "comment" | "comments" => NotificationType::Comment,
-        "system" => NotificationType::System,
-        "message" | "messages" | "pm" => NotificationType::Message,
-        _ => NotificationType::Reply,
+        "reply" | "replies" => Ok(NotificationType::Reply),
+        "quote" | "quotes" => Ok(NotificationType::Quote),
+        "mention" | "mentions" | "at" => Ok(NotificationType::Mention),
+        "comment" | "comments" => Ok(NotificationType::Comment),
+        "system" => Ok(NotificationType::System),
+        "message" | "messages" | "pm" => Ok(NotificationType::Message),
+        other => Err(anyhow::anyhow!("Unknown notification type: {other}")),
     }
 }
 
 /// Get notification counts.
 pub async fn get_counts(client: &NGAClient) -> Result<NotificationCountsInfo> {
-    let counts = client.notifications().counts().await?;
+    let counts = client
+        .notifications()
+        .counts()
+        .await
+        .context("fetching notification counts")?;
     Ok(NotificationCountsInfo {
         replies: counts.replies,
         quotes: counts.quotes,
@@ -186,16 +192,17 @@ pub async fn list_notifications(
     kind: &str,
     page: u32,
 ) -> Result<NotificationListResult> {
-    let noti_type = parse_notification_type(kind);
+    let noti_type = parse_notification_type(kind)?;
     let result = client
         .notifications()
         .list(noti_type)
         .page(page)
         .send()
-        .await?;
+        .await
+        .context("listing notifications")?;
 
     Ok(NotificationListResult {
-        kind: format!("{:?}", noti_type),
+        kind: noti_type.param().to_string(),
         page,
         total_pages: result.total_pages,
         notifications: result
@@ -203,7 +210,7 @@ pub async fn list_notifications(
             .iter()
             .map(|n| NotificationInfo {
                 id: n.id.clone(),
-                kind: format!("{:?}", n.kind),
+                kind: n.kind.param().to_string(),
                 content: n.content.clone(),
                 from: n.from_username.clone(),
                 from_uid: n.from_user_id.as_ref().map(|u| u.to_string()),
@@ -212,12 +219,17 @@ pub async fn list_notifications(
                 post_id: n.post_id.as_ref().map(|p| p.to_string()),
             })
             .collect(),
+        meta: ResponseMeta::page_only(page, result.total_pages),
     })
 }
 
 /// Mark a notification as read.
 pub async fn mark_read(client: &NGAClient, id: &str) -> Result<MarkReadResult> {
-    client.notifications().mark_read(id).await?;
+    client
+        .notifications()
+        .mark_read(id)
+        .await
+        .context("marking notification read")?;
     Ok(MarkReadResult {
         id: id.to_string(),
         success: true,
@@ -226,10 +238,37 @@ pub async fn mark_read(client: &NGAClient, id: &str) -> Result<MarkReadResult> {
 
 /// Mark all notifications of a type as read.
 pub async fn mark_all_read(client: &NGAClient, kind: &str) -> Result<MarkAllReadResult> {
-    let noti_type = parse_notification_type(kind);
-    client.notifications().mark_all_read(noti_type).await?;
+    let noti_type = parse_notification_type(kind)?;
+    client
+        .notifications()
+        .mark_all_read(noti_type)
+        .await
+        .context("marking all notifications read")?;
     Ok(MarkAllReadResult {
         kind: format!("{:?}", noti_type),
         success: true,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_notification_type;
+    use rnga::NotificationType;
+
+    #[test]
+    fn test_parse_notification_type_valid() {
+        assert_eq!(parse_notification_type("reply").unwrap(), NotificationType::Reply);
+        assert_eq!(parse_notification_type("at").unwrap(), NotificationType::Mention);
+    }
+
+    #[test]
+    fn test_parse_notification_type_unknown() {
+        assert!(parse_notification_type("invalid").is_err());
+    }
+
+    #[test]
+    fn test_notification_kind_uses_api_name() {
+        let noti_type = parse_notification_type("reply").unwrap();
+        assert_eq!(noti_type.param(), "reply");
+    }
 }

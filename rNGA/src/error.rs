@@ -81,9 +81,13 @@ impl Error {
     pub fn is_retryable(&self) -> bool {
         match self {
             Error::Network(_) => true,
-            Error::NGAApi { code, .. } => code == "-4",
+            Error::NGAApi { code, .. } => code == "-4" || code == "403",
             _ => false,
         }
+    }
+
+    pub fn is_forbidden(&self) -> bool {
+        matches!(self, Error::NGAApi { code, .. } if code == "403")
     }
 
     /// Check if this is an authentication error.
@@ -112,6 +116,13 @@ mod tests {
     #[test]
     fn test_retryable() {
         assert!(Error::nga("-4", "blocked").is_retryable());
+        assert!(Error::nga("403", "Forbidden").is_retryable());
         assert!(!Error::nga("1", "not blocked").is_retryable());
+    }
+
+    #[test]
+    fn test_forbidden() {
+        assert!(Error::nga("403", "Forbidden").is_forbidden());
+        assert!(!Error::nga("401", "Unauthorized").is_forbidden());
     }
 }

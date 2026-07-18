@@ -19,25 +19,31 @@ cargo build --release
 
 ### Authentication
 
-Before using commands that require login, authenticate first:
+Credentials: `ngaPassportUid` (uid), `ngaPassportCid` (token). See [Getting credentials](#getting-credentials).
 
 ```bash
-# Login with your NGA token and user ID
 rnga auth login --token YOUR_TOKEN --uid YOUR_UID
-
-# Steps to get NGA Token and UID 
-# 1. Login to https://nga.178.com/
-# 2. Right Click -> Inspect (F12) to open Developer Tools
-# 3. Application -> Storage -> Cookies
-# ngaPassportUid = UID
-# ngaPassportCid = Token
-
-# Check auth status
 rnga auth status
-
-# Logout
 rnga auth logout
 ```
+
+<a id="getting-credentials"></a>
+
+**Getting credentials:** log in at https://nga.178.com/ → DevTools → Application → Cookies → `ngaPassportUid`, `ngaPassportCid`.
+
+### Interactive TUI
+
+```bash
+rnga tui
+rnga tui --forum 7
+rnga tui --forum 39827852 --stid
+rnga tui --topic 12345678
+rnga --lang zh-CN tui
+```
+
+Three-pane layout (forums → topics → thread). Keys: `←/→` panes, `↑/↓` select, `n`/`p` page, `/` filter, `r` refresh, `a` auto-refresh, `q` quit.
+
+Requires login for favorite forums in the forum list (`rnga auth login`).
 
 ### Forum Commands
 
@@ -262,7 +268,7 @@ Short aliases are available for common commands:
 
 ## Configuration
 
-Configuration is stored as `rnga.toml` in the same directory as the executable.
+Configuration is stored at `~/.config/rnga/config.toml`. Override the directory with `RNGA_CONFIG_DIR` or `XDG_CONFIG_HOME`.
 
 View current config location:
 
@@ -283,19 +289,34 @@ rnga --mcp
 
 ### Available Tools
 
-The MCP server exposes the following tools:
+| Tool | Description | Auth |
+|------|-------------|------|
+| `auth_status` | Check configured credentials | — |
+| `forum_list` | List forum categories | — |
+| `forum_search` | Search forums by name | — |
+| `forum_favorites` | List favorite forums | Yes |
+| `forum_favorite_add` | Add forum to favorites | Yes |
+| `forum_favorite_remove` | Remove forum from favorites | Yes |
+| `topic_list` | List topics (≤5 pages) | — |
+| `topic_read` | Read topic (`all` ≤20 pages) | — |
+| `topic_search` | Search topics in forum | — |
+| `topic_recent` | Recent topics in forum | — |
+| `post_hot` | Hot replies on a post | — |
+| `post_comments` | Comments on a post | — |
+| `post_reply` | Reply to topic | Yes |
+| `post_vote` | Vote on post | Yes |
+| `post_comment` | Comment on post | Yes |
+| `user_get` | Profile by ID | — |
+| `user_by_name` | Profile by username | — |
+| `user_search` | Search users | — |
+| `notification_counts` | Unread counts | Yes |
+| `notification_list` | List by type | Yes |
+| `notification_read` | Mark read | Yes |
+| `message_list` | PM conversations | Yes |
+| `message_read` | Read conversation | Yes |
+| `message_send` | Send or reply to PM | Yes |
 
-| Tool | Description | Auth Required |
-|------|-------------|---------------|
-| `forum_list` | List all forum categories and forums | No |
-| `forum_search` | Search forums by name | No |
-| `topic_list` | List topics in a forum | No |
-| `topic_read` | Read a topic with its posts | No |
-| `topic_search` | Search topics in a forum | No |
-| `user_get` | Get user profile by ID | No |
-| `user_by_name` | Get user profile by username | No |
-| `post_reply` | Reply to a topic | Yes |
-| `notification_counts` | Get unread notification counts | Yes |
+Endpoint details: [docs/CLIENT.md](../docs/CLIENT.md).
 
 ### IDE Configurations
 
@@ -320,7 +341,7 @@ The MCP server uses the same authentication as the CLI. Login via CLI first:
 rnga auth login --token YOUR_TOKEN --uid YOUR_UID
 ```
 
-The credentials are stored in `rnga.toml` and shared between CLI and MCP server.
+The credentials are stored in the shared config file and used by both CLI and MCP server.
 
 ## Examples
 
@@ -356,11 +377,8 @@ rnga topic read 12345678 -p 3
 ### Check notifications
 
 ```bash
-# Quick check
-nga n counts
-
-# View replies
-nga n list -k reply
+rnga n counts
+rnga n list -k reply
 ```
 
 ## License

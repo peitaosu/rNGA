@@ -54,10 +54,10 @@ pub async fn handle(action: ForumAction, format: OutputFormat, verbose: bool) ->
 
 async fn list_categories(format: OutputFormat, verbose: bool) -> Result<()> {
     let client = build_client()?;
-    let categories = handlers::list_categories(&client).await?;
+    let result = handlers::list_categories(&client).await?;
 
     if verbose {
-        for category in &categories {
+        for category in &result.categories {
             if matches!(format, OutputFormat::Plain) {
                 println!("\n{}", category.name);
                 println!("{}", "=".repeat(category.name.len()));
@@ -65,7 +65,7 @@ async fn list_categories(format: OutputFormat, verbose: bool) -> Result<()> {
             print_table(category.forums.clone(), format);
         }
     } else {
-        print_table(categories, format);
+        print_table(result.categories, format);
     }
 
     Ok(())
@@ -73,19 +73,15 @@ async fn list_categories(format: OutputFormat, verbose: bool) -> Result<()> {
 
 async fn search_forums(keyword: &str, format: OutputFormat) -> Result<()> {
     let client = build_client()?;
-    let forums = handlers::search_forums(&client, keyword).await?;
-
-    print_table(forums, format);
-
+    let result = handlers::search_forums(&client, keyword).await?;
+    print_table(result.forums, format);
     Ok(())
 }
 
 async fn list_favorites(format: OutputFormat) -> Result<()> {
     let client = build_authed_client()?;
-    let forums = handlers::list_favorites(&client).await?;
-
-    print_table(forums, format);
-
+    let result = handlers::list_favorites(&client).await?;
+    print_table(result.forums, format);
     Ok(())
 }
 

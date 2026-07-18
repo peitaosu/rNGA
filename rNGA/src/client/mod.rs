@@ -97,13 +97,16 @@ impl NGAClientBuilder {
     /// Build NGAClient.
     pub fn build(self) -> Result<NGAClient> {
         let http_client = build_client(&self.http_config)?;
+        let cache = self.cache.or_else(|| {
+            Some(Arc::new(crate::cache::MemoryCache::with_capacity(256)) as Arc<dyn CacheStorage>)
+        });
 
         Ok(NGAClient {
             inner: Arc::new(NGAClientInner {
                 http: http_client,
                 config: self.http_config,
                 auth: self.auth,
-                cache: self.cache,
+                cache,
             }),
         })
     }
@@ -114,8 +117,6 @@ pub(crate) struct NGAClientInner {
     pub http: reqwest::Client,
     pub config: HttpConfig,
     pub auth: Option<AuthInfo>,
-    /// Cache storage for API responses
-    #[allow(dead_code)]
     pub cache: Option<Arc<dyn CacheStorage>>,
 }
 
@@ -152,7 +153,7 @@ impl NGAClientInner {
     ) -> Result<String> {
         let auth = self.auth_tuple()?;
         self.executor()
-            .post_form(api, query, form, Some(auth))
+            .post_form_xml(api, query, form, Some(auth))
             .await
     }
 
@@ -167,8 +168,20 @@ impl NGAClientInner {
         self.executor().post_form_xml(api, query, form, auth).await
     }
 
+    /// Execute authenticated JSON POST request.
+    pub async fn post_json_authed(
+        &self,
+        api: &str,
+        query: &[(&str, &str)],
+        form: &[(&str, &str)],
+    ) -> Result<serde_json::Value> {
+        let auth = self.auth_tuple()?;
+        self.executor()
+            .post_json(api, query, form, Some(auth))
+            .await
+    }
+
     /// Execute a JSON POST request.
-    #[allow(dead_code)]
     pub async fn post_json(
         &self,
         api: &str,

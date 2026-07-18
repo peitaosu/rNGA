@@ -6,7 +6,7 @@ use crate::{
     client::NGAClientInner,
     error::{Error, Result},
     models::{ShortMessage, ShortMessagePost, UserId},
-    parser::{parse_content, XmlDocument},
+    parser::{compute_total_pages, parse_content, XmlDocument},
 };
 
 /// API for short message operations.
@@ -32,7 +32,7 @@ impl MessageApi {
             )
             .await?;
 
-        parse_message_list(&xml, self.client.auth.as_ref().map(|a| a.uid.as_str()))
+        parse_message_list(&xml, self.client.auth.as_ref().map(|a| a.uid.as_str()), page)
     }
 
     /// Get messages in a conversation.
@@ -111,7 +111,7 @@ impl ConversationBuilder {
             .await?;
 
         let current_uid = self.client.auth.as_ref().map(|a| a.uid.as_str());
-        parse_conversation(&xml, current_uid)
+        parse_conversation(&xml, current_uid, self.page)
     }
 }
 
@@ -199,7 +199,11 @@ impl SendMessageBuilder {
     }
 }
 
-fn parse_message_list(xml: &str, current_uid: Option<&str>) -> Result<MessageListResult> {
+fn parse_message_list(
+    xml: &str,
+    current_uid: Option<&str>,
+    page: u32,
+) -> Result<MessageListResult> {
     let doc = XmlDocument::parse(xml)?;
     let mut conversations = Vec::new();
 
@@ -210,16 +214,12 @@ fn parse_message_list(xml: &str, current_uid: Option<&str>) -> Result<MessageLis
     }
 
     let total_rows = doc.int_or("/root/__ROWS", 0) as u32;
-    let total_pages = if total_rows > 0 {
-        (total_rows + 19) / 20
-    } else {
-        1
-    };
+    let total_pages = compute_total_pages(total_rows, 20);
 
     Ok(MessageListResult {
         conversations,
         total_pages,
-        page: 1,
+        page,
     })
 }
 
@@ -258,7 +258,11 @@ fn parse_conversation_item(
     Ok(Some(conv))
 }
 
-fn parse_conversation(xml: &str, current_uid: Option<&str>) -> Result<ConversationResult> {
+fn parse_conversation(
+    xml: &str,
+    current_uid: Option<&str>,
+    page: u32,
+) -> Result<ConversationResult> {
     let doc = XmlDocument::parse(xml)?;
     let mut messages = Vec::new();
 
@@ -275,18 +279,14 @@ fn parse_conversation(xml: &str, current_uid: Option<&str>) -> Result<Conversati
     }
 
     let total_rows = doc.int_or("/root/__ROWS", 0) as u32;
-    let total_pages = if total_rows > 0 {
-        (total_rows + 19) / 20
-    } else {
-        1
-    };
+    let total_pages = compute_total_pages(total_rows, 20);
 
     Ok(ConversationResult {
         messages,
         other_username,
         other_user_id,
         total_pages,
-        page: 1,
+        page,
     })
 }
 

@@ -7,9 +7,11 @@ use rust_i18n::t;
 use std::collections::HashMap;
 
 use crate::config::{build_authed_client, build_client};
-use crate::handlers::topic::{
-    self as handlers, ListTopicsOptions, ReadTopicOptions, RecentTopicsOptions, SearchTopicsOptions,
+use crate::output;
+use crate::handlers::options::{
+    ListTopicsOptions, ReadTopicOptions, RecentTopicsOptions, SearchTopicsOptions,
 };
+use crate::handlers::topic::{self as handlers};
 use crate::output::{format_relative_time, format_time, print_table, OutputFormat};
 
 #[derive(Subcommand)]
@@ -442,8 +444,7 @@ async fn recent_topics(
             println!("{}", serde_json::to_string_pretty(&result.posts)?);
         }
         OutputFormat::Toon => {
-            let json_value = serde_json::to_value(&result.posts)?;
-            println!("{}", toon_format::encode_default(&json_value).unwrap_or_default());
+            println!("{}", output::encode_toon(&result.posts));
         }
         OutputFormat::Table | OutputFormat::Plain => {
             let mut posts_by_topic: HashMap<String, Vec<&handlers::RecentPostInfo>> =

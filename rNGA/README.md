@@ -51,7 +51,11 @@ For operations requiring login:
 let client = NGAClient::builder()
     .auth("your_token", "your_uid")
     .build()?;
+```
 
+Credentials are `ngaPassportCid` (token) and `ngaPassportUid` (uid). HTTP routing per endpoint: [docs/CLIENT.md](../docs/CLIENT.md).
+
+```rust
 // Check notifications
 let counts = client.notifications().counts().await?;
 println!("Unread: {}", counts.total());
@@ -233,12 +237,12 @@ match client.topics().details("123").send().await {
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `native-tls` | ✓ | Use native TLS for HTTPS |
-| `rustls` | | Use rustls for HTTPS (pure Rust TLS) |
+| `rustls` | ✓ | Use rustls for HTTPS (pure Rust TLS) |
+| `native-tls` | | Use native TLS for HTTPS |
 
 ```toml
 [dependencies]
-rnga = { git = "...", default-features = false, features = ["rustls"] }
+rnga = { git = "...", default-features = false, features = ["native-tls"] }
 ```
 
 ## License

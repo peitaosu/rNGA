@@ -76,7 +76,7 @@ macro_rules! define_id {
     };
 }
 
-define_id!(ForumId, "A forum identifier.");
+define_id!(ForumId, "A forum identifier. Prefer ForumIdKind for API calls.");
 define_id!(TopicId, "A topic/thread identifier.");
 define_id!(PostId, "A post/reply identifier.");
 define_id!(UserId, "A user identifier.");

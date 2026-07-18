@@ -5,10 +5,12 @@ mod config;
 mod handlers;
 mod mcp;
 mod output;
+mod tui;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use commands::{forum, message, notification, post, topic, user};
+use rnga::AuthInfo;
 use rust_i18n::t;
 
 rust_i18n::i18n!("src/locales", fallback = "en");
@@ -91,6 +93,19 @@ enum Commands {
 
     /// Show current configuration
     Config,
+
+    /// Interactive terminal UI
+    Tui {
+        /// Open this forum on start
+        #[arg(long)]
+        forum: Option<String>,
+        /// Treat --forum as stid
+        #[arg(long)]
+        stid: bool,
+        /// Open this topic on start
+        #[arg(long)]
+        topic: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -154,12 +169,21 @@ async fn main() -> Result<()> {
             }
             Ok(())
         }
+        Commands::Tui {
+            forum,
+            stid,
+            topic,
+        } => tui::run(forum, stid, topic).await,
     }
 }
 
 async fn handle_auth(action: AuthAction) -> Result<()> {
     match action {
         AuthAction::Login { token, uid } => {
+            let auth = AuthInfo::new(token.clone(), uid.clone());
+            if !auth.is_valid() {
+                anyhow::bail!("Invalid credentials: token and uid must be non-empty");
+            }
             let mut cfg = config::load_config()?;
             cfg.auth = Some(config::AuthConfig {
                 token: token.clone(),

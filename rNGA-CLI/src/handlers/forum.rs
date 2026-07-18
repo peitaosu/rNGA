@@ -1,30 +1,43 @@
 //! Forum handlers.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use colored::Colorize;
 use rnga::models::*;
 use rnga::NGAClient;
 use rust_i18n::t;
 use serde::Serialize;
 
+use crate::handlers::meta::ResponseMeta;
 use crate::output::{PlainPrint, TableRow};
 
-/// Forum information.
 #[derive(Debug, Clone, Serialize)]
 pub struct ForumInfo {
-    pub id: String,
+    pub fid: Option<String>,
+    pub stid: Option<String>,
     pub name: String,
     pub info: String,
 }
 
+impl ForumInfo {
+    fn id_label(&self) -> &str {
+        self.stid
+            .as_deref()
+            .or(self.fid.as_deref())
+            .unwrap_or("")
+    }
+}
+
 impl From<&Forum> for ForumInfo {
     fn from(f: &Forum) -> Self {
+        let (fid, stid) = match f.id.as_ref() {
+            Some(ForumIdKind::Fid(id)) => (Some(id.clone()), None),
+            Some(ForumIdKind::Stid(id)) => (None, Some(id.clone())),
+            None => (None, None),
+        };
+
         Self {
-            id: f
-                .id
-                .as_ref()
-                .map(|id| id.id().to_string())
-                .unwrap_or_default(),
+            fid,
+            stid,
             name: f.name.clone(),
             info: f.info.clone(),
         }
@@ -33,25 +46,30 @@ impl From<&Forum> for ForumInfo {
 
 impl TableRow for ForumInfo {
     fn headers() -> Vec<&'static str> {
-        vec!["ID", "Name", "Info"]
+        vec!["FID", "STID", "Name", "Info"]
     }
     fn row(&self) -> Vec<String> {
-        vec![self.id.clone(), self.name.clone(), self.info.clone()]
+        vec![
+            self.fid.clone().unwrap_or_default(),
+            self.stid.clone().unwrap_or_default(),
+            self.name.clone(),
+            self.info.clone(),
+        ]
     }
 }
 
 impl PlainPrint for ForumInfo {
     fn plain_print(&self) {
-        println!("[{}] {}", self.id.cyan(), self.name.bold());
+        println!("[{}] {}", self.id_label().cyan(), self.name.bold());
         if !self.info.is_empty() {
             println!("   {}", self.info.dimmed());
         }
     }
 }
 
-/// Category with its forums.
 #[derive(Debug, Clone, Serialize)]
 pub struct CategoryInfo {
+    pub id: String,
     pub name: String,
     pub forum_count: usize,
     pub forums: Vec<ForumInfo>,
@@ -60,6 +78,7 @@ pub struct CategoryInfo {
 impl From<&Category> for CategoryInfo {
     fn from(c: &Category) -> Self {
         Self {
+            id: c.id.clone(),
             name: c.name.clone(),
             forum_count: c.forums.len(),
             forums: c.forums.iter().map(ForumInfo::from).collect(),
@@ -88,73 +107,97 @@ impl PlainPrint for CategoryInfo {
     }
 }
 
-/// Result of favorite modification.
+#[derive(Debug, Clone, Serialize)]
+pub struct ForumListResult {
+    pub categories: Vec<CategoryInfo>,
+    pub meta: ResponseMeta,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ForumSearchResult {
+    pub forums: Vec<ForumInfo>,
+    pub meta: ResponseMeta,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct FavoriteModifyResult {
     pub id: String,
     pub action: String,
 }
 
-/// List all forum categories.
-pub async fn list_categories(client: &NGAClient) -> Result<Vec<CategoryInfo>> {
-    let categories = client.forums().list().await?;
-    Ok(categories.iter().map(CategoryInfo::from).collect())
+pub async fn list_categories(client: &NGAClient) -> Result<ForumListResult> {
+    let categories = client
+        .forums()
+        .list()
+        .await
+        .context("listing forum categories")?;
+    Ok(ForumListResult {
+        categories: categories.iter().map(CategoryInfo::from).collect(),
+        meta: ResponseMeta::empty(),
+    })
 }
 
-/// Search forums by keyword.
-pub async fn search_forums(client: &NGAClient, keyword: &str) -> Result<Vec<ForumInfo>> {
-    let forums = client.forums().search(keyword).await?;
-    Ok(forums.iter().map(ForumInfo::from).collect())
+pub async fn search_forums(client: &NGAClient, keyword: &str) -> Result<ForumSearchResult> {
+    let forums = client
+        .forums()
+        .search(keyword)
+        .await
+        .context("searching forums")?;
+    Ok(ForumSearchResult {
+        forums: forums.iter().map(ForumInfo::from).collect(),
+        meta: ResponseMeta::empty(),
+    })
 }
 
-/// List favorite forums.
-pub async fn list_favorites(client: &NGAClient) -> Result<Vec<ForumInfo>> {
-    let forums = client.forums().favorites().await?;
-    Ok(forums.iter().map(ForumInfo::from).collect())
+pub async fn list_favorites(client: &NGAClient) -> Result<ForumSearchResult> {
+    let forums = client
+        .forums()
+        .favorites()
+        .await
+        .context("listing favorite forums")?;
+    Ok(ForumSearchResult {
+        forums: forums.iter().map(ForumInfo::from).collect(),
+        meta: ResponseMeta::empty(),
+    })
 }
 
-/// Add forum to favorites.
-pub async fn add_favorite(
-    client: &NGAClient,
-    id: &str,
-    is_stid: bool,
-) -> Result<FavoriteModifyResult> {
-    let forum_id = if is_stid {
-        ForumIdKind::stid(id)
-    } else {
-        ForumIdKind::fid(id)
-    };
-
+pub async fn add_favorite(client: &NGAClient, forum_id: &str, is_stid: bool) -> Result<FavoriteModifyResult> {
+    let id = ForumIdKind::from_stid_flag(forum_id, is_stid);
     client
         .forums()
-        .modify_favorite(forum_id, FavoriteForumOp::Add)
-        .await?;
+        .modify_favorite(id, FavoriteForumOp::Add)
+        .await
+        .context("adding forum favorite")?;
 
     Ok(FavoriteModifyResult {
-        id: id.to_string(),
+        id: forum_id.to_string(),
         action: "added".to_string(),
     })
 }
 
-/// Remove forum from favorites.
-pub async fn remove_favorite(
-    client: &NGAClient,
-    id: &str,
-    is_stid: bool,
-) -> Result<FavoriteModifyResult> {
-    let forum_id = if is_stid {
-        ForumIdKind::stid(id)
-    } else {
-        ForumIdKind::fid(id)
-    };
-
+pub async fn remove_favorite(client: &NGAClient, forum_id: &str, is_stid: bool) -> Result<FavoriteModifyResult> {
+    let id = ForumIdKind::from_stid_flag(forum_id, is_stid);
     client
         .forums()
-        .modify_favorite(forum_id, FavoriteForumOp::Remove)
-        .await?;
+        .modify_favorite(id, FavoriteForumOp::Remove)
+        .await
+        .context("removing forum favorite")?;
 
     Ok(FavoriteModifyResult {
-        id: id.to_string(),
+        id: forum_id.to_string(),
         action: "removed".to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_forum_info_from_stid() {
+        let forum = Forum::minimal(ForumIdKind::stid("123"), "Test");
+        let info = ForumInfo::from(&forum);
+        assert_eq!(info.stid.as_deref(), Some("123"));
+        assert!(info.fid.is_none());
+    }
 }

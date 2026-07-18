@@ -1,13 +1,17 @@
 //! User API.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::{
+    cache::{get_json, set_json},
     client::NGAClientInner,
     error::{Error, Result},
-    models::{User, UserId, UserName},
-    parser::XmlDocument,
+    models::{User, UserId},
+    parser::{parse_user_from_attrs, XmlDocument},
 };
+
+const USER_CACHE_TTL: Duration = Duration::from_secs(300);
 
 /// API for user operations.
 pub struct UserApi {
@@ -22,7 +26,30 @@ impl UserApi {
     /// Get user by ID.
     pub async fn get(&self, user_id: impl Into<UserId>) -> Result<User> {
         let user_id = user_id.into();
+        let cache_key = format!("user:id:{}", user_id.as_str());
 
+        if let Some(cache) = &self.client.cache {
+            if let Some(user) = get_json(cache.as_ref(), &cache_key).await {
+                return Ok(user);
+            }
+        }
+
+        let user = self.fetch_user_by_id(&user_id).await?;
+
+        if let Some(cache) = &self.client.cache {
+            let _ = set_json(
+                cache.as_ref(),
+                &cache_key,
+                &user,
+                Some(USER_CACHE_TTL),
+            )
+            .await;
+        }
+
+        Ok(user)
+    }
+
+    async fn fetch_user_by_id(&self, user_id: &UserId) -> Result<User> {
         let xml = self
             .client
             .post(
@@ -36,11 +63,19 @@ impl UserApi {
             )
             .await?;
 
-        parse_user_response(&xml, &user_id)
+        parse_user_response(&xml, user_id)
     }
 
     /// Get user by username.
     pub async fn get_by_name(&self, username: &str) -> Result<User> {
+        let cache_key = format!("user:name:{username}");
+
+        if let Some(cache) = &self.client.cache {
+            if let Some(user) = get_json(cache.as_ref(), &cache_key).await {
+                return Ok(user);
+            }
+        }
+
         let xml = self
             .client
             .post(
@@ -50,12 +85,27 @@ impl UserApi {
             )
             .await?;
 
-        let doc = XmlDocument::parse(&xml)?;
-        let uid = doc
-            .string_opt("/root/data/item/uid")
-            .ok_or_else(|| Error::missing("uid"))?;
+        let uid = {
+            let doc = XmlDocument::parse(&xml)?;
+            doc.string_opt("/root/data/item/uid")
+                .ok_or_else(|| Error::missing("uid"))?
+        };
 
-        parse_user_response(&xml, &UserId::new(uid))
+        let user = parse_user_response(&xml, &UserId::new(uid))?;
+
+        if let Some(cache) = &self.client.cache {
+            let _ = set_json(
+                cache.as_ref(),
+                &cache_key,
+                &user,
+                Some(USER_CACHE_TTL),
+            )
+            .await;
+            let id_key = format!("user:id:{}", user.id.as_str());
+            let _ = set_json(cache.as_ref(), &id_key, &user, Some(USER_CACHE_TTL)).await;
+        }
+
+        Ok(user)
     }
 
     /// Get current authenticated user.
@@ -99,39 +149,7 @@ fn parse_user_response(xml: &str, user_id: &UserId) -> Result<User> {
 
     let attrs = node.attrs();
 
-    let name = attrs
-        .get("username")
-        .map(|s| UserName::parse(s))
-        .unwrap_or_default();
-
-    let user = User {
-        id: user_id.clone(),
-        name,
-        avatar_url: attrs.get("avatar").cloned(),
-        reputation: attrs.get("fame").and_then(|s| s.parse().ok()).unwrap_or(0),
-        posts: attrs
-            .get("postnum")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0),
-        reg_date: attrs
-            .get("regdate")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0),
-        signature: attrs.get("signature").cloned(),
-        is_admin: attrs.get("admincheck").map(|s| s != "0").unwrap_or(false),
-        is_mod: attrs
-            .get("groupid")
-            .map(|s| s == "5" || s == "6")
-            .unwrap_or(false),
-        is_muted: attrs
-            .get("mute")
-            .and_then(|s| s.parse::<i64>().ok())
-            .map(|t| t > 0)
-            .unwrap_or(false),
-        honor: attrs.get("honor").cloned(),
-    };
-
-    Ok(user)
+    parse_user_from_attrs(&attrs, user_id.clone())
 }
 
 fn parse_user_search(xml: &str) -> Result<Vec<UserSearchResult>> {

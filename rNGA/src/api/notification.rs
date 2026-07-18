@@ -6,6 +6,7 @@ use crate::{
     client::NGAClientInner,
     error::Result,
     models::{Notification, NotificationCounts, NotificationType, PostId, TopicId, UserId},
+    parser::compute_total_pages,
     parser::XmlDocument,
 };
 
@@ -109,7 +110,7 @@ impl NotificationListBuilder {
             )
             .await?;
 
-        parse_notification_list(&xml, self.kind)
+        parse_notification_list(&xml, self.kind, self.page)
     }
 }
 
@@ -137,7 +138,11 @@ fn parse_notification_counts(xml: &str) -> Result<NotificationCounts> {
     })
 }
 
-fn parse_notification_list(xml: &str, kind: NotificationType) -> Result<NotificationListResult> {
+fn parse_notification_list(
+    xml: &str,
+    kind: NotificationType,
+    page: u32,
+) -> Result<NotificationListResult> {
     let doc = XmlDocument::parse(xml)?;
     let mut notifications = Vec::new();
 
@@ -148,16 +153,12 @@ fn parse_notification_list(xml: &str, kind: NotificationType) -> Result<Notifica
     }
 
     let total_rows = doc.int_or("/root/__ROWS", 0) as u32;
-    let total_pages = if total_rows > 0 {
-        (total_rows + 19) / 20
-    } else {
-        1
-    };
+    let total_pages = compute_total_pages(total_rows, 20);
 
     Ok(NotificationListResult {
         notifications,
         total_pages,
-        page: 1,
+        page,
     })
 }
 
@@ -213,13 +214,11 @@ fn parse_notification(
 }
 
 fn extract_ids_from_url(url: &str) -> (Option<TopicId>, Option<PostId>) {
-    use lazy_static::lazy_static;
     use regex::Regex;
+    use std::sync::LazyLock;
 
-    lazy_static! {
-        static ref TID_RE: Regex = Regex::new(r"tid=(\d+)").unwrap();
-        static ref PID_RE: Regex = Regex::new(r"pid=(\d+)").unwrap();
-    }
+    static TID_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"tid=(\d+)").unwrap());
+    static PID_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"pid=(\d+)").unwrap());
 
     let topic_id = TID_RE
         .captures(url)

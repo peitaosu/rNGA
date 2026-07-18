@@ -6,7 +6,7 @@ use crate::{
     client::NGAClientInner,
     error::{Error, Result},
     models::{LightPost, PostId, TopicId, User, UserName, Vote, VoteState},
-    parser::{parse_content, XmlDocument},
+    parser::{compute_total_pages, parse_content, XmlDocument},
 };
 
 /// API for post operations.
@@ -105,7 +105,7 @@ impl PostApi {
             )
             .await?;
 
-        parse_comments(&xml)
+        parse_comments(&xml, page)
     }
 
     /// Create a reply to a topic.
@@ -176,7 +176,7 @@ impl PostApi {
             )
             .await?;
 
-        parse_user_posts(&xml)
+        parse_user_posts(&xml, page)
     }
 }
 
@@ -389,7 +389,7 @@ fn parse_hot_replies(xml: &str) -> Result<Vec<LightPost>> {
     Ok(replies)
 }
 
-fn parse_comments(xml: &str) -> Result<CommentsResult> {
+fn parse_comments(xml: &str, page: u32) -> Result<CommentsResult> {
     let doc = XmlDocument::parse(xml)?;
     let mut comments = Vec::new();
 
@@ -399,17 +399,13 @@ fn parse_comments(xml: &str) -> Result<CommentsResult> {
         }
     }
 
-    let total_pages = doc.int_or("/root/__ROWS", 0) as u32;
-    let total_pages = if total_pages > 0 {
-        (total_pages + 19) / 20
-    } else {
-        1
-    };
+    let total_rows = doc.int_or("/root/__ROWS", 0) as u32;
+    let total_pages = compute_total_pages(total_rows, 20);
 
     Ok(CommentsResult {
         comments,
         total_pages,
-        page: 1,
+        page,
     })
 }
 
@@ -446,7 +442,7 @@ fn parse_light_post(node: &crate::parser::XmlNode<'_>) -> Result<Option<LightPos
     }))
 }
 
-fn parse_user_posts(xml: &str) -> Result<UserPostsResult> {
+fn parse_user_posts(xml: &str, page: u32) -> Result<UserPostsResult> {
     let doc = XmlDocument::parse(xml)?;
     let mut posts = Vec::new();
 
@@ -468,16 +464,12 @@ fn parse_user_posts(xml: &str) -> Result<UserPostsResult> {
     }
 
     let total_rows = doc.int_or("/root/__ROWS", 0) as u32;
-    let total_pages = if total_rows > 0 {
-        (total_rows + 34) / 35
-    } else {
-        1
-    };
+    let total_pages = compute_total_pages(total_rows, 35);
 
     Ok(UserPostsResult {
         posts,
         total_pages,
-        page: 1,
+        page,
     })
 }
 

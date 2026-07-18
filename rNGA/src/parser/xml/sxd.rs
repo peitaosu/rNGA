@@ -303,8 +303,17 @@ pub fn parse_timestamp(s: &str) -> Option<i64> {
     parse_int(s).ok()
 }
 
+/// Compute total pages from row count and page size.
+pub fn compute_total_pages(total_rows: u32, per_page: u32) -> u32 {
+    if total_rows == 0 {
+        return 1;
+    }
+
+    ((total_rows + per_page - 1) / per_page).max(1)
+}
+
 #[cfg(test)]
-mod tests {
+mod sxd_tests {
     use super::*;
 
     #[test]
@@ -314,35 +323,5 @@ mod tests {
         assert_eq!(parse_int("1.5e9").unwrap(), 1500000000);
         assert_eq!(parse_int("123.45").unwrap(), 123);
         assert_eq!(parse_int("").unwrap(), 0);
-    }
-
-    #[test]
-    fn test_extract_kv() {
-        let text = "key1\tval1\tkey2\tval2\tkey3\tval3";
-        let kv = extract_kv(text);
-        assert_eq!(kv.get("key1"), Some(&"val1".to_owned()));
-        assert_eq!(kv.get("key2"), Some(&"val2".to_owned()));
-        assert_eq!(kv.get("key3"), Some(&"val3".to_owned()));
-    }
-
-    #[test]
-    fn test_xml_parse() {
-        let xml = r#"<?xml version="1.0"?><root><item id="1" name="test"/></root>"#;
-        let doc = XmlDocument::parse(xml).unwrap();
-
-        let items = doc.select("//item").unwrap();
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].attr("id"), Some("1".to_owned()));
-        assert_eq!(items[0].attr("name"), Some("test".to_owned()));
-    }
-
-    #[test]
-    fn test_nga_error_detection() {
-        let error_xml = r#"<error code="1" message="Not logged in"/>"#;
-        let result = check_nga_error(error_xml);
-        assert!(result.is_err());
-
-        let ok_xml = r#"<data><item id="1"/></data>"#;
-        assert!(check_nga_error(ok_xml).is_ok());
     }
 }

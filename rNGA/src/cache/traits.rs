@@ -47,7 +47,26 @@ pub trait CacheStorageExt: CacheStorage {
 }
 
 // Blanket implementation
-impl<T: CacheStorage> CacheStorageExt for T {}
+impl<T: CacheStorage + ?Sized> CacheStorageExt for T {}
+
+pub async fn get_json<T: serde::de::DeserializeOwned>(
+    cache: &dyn CacheStorage,
+    key: &str,
+) -> Option<T> {
+    let data = cache.get(key).await?;
+    serde_json::from_slice(&data).ok()
+}
+
+pub async fn set_json<T: serde::Serialize + Sync>(
+    cache: &dyn CacheStorage,
+    key: &str,
+    value: &T,
+    ttl: Option<Duration>,
+) -> Result<()> {
+    let data = serde_json::to_vec(value).map_err(crate::error::Error::Json)?;
+    cache.set(key, &data, ttl).await;
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {

@@ -1,11 +1,12 @@
 //! Message handlers.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use colored::Colorize;
 use rnga::NGAClient;
 use rust_i18n::t;
 use serde::Serialize;
 
+use crate::handlers::meta::ResponseMeta;
 use crate::output::{format_relative_time, PlainPrint, TableRow};
 
 /// Message conversation info.
@@ -62,6 +63,7 @@ pub struct MessageListResult {
     pub page: u32,
     pub total_pages: u32,
     pub conversations: Vec<MessageInfo>,
+    pub meta: ResponseMeta,
 }
 
 /// Message post info.
@@ -117,6 +119,7 @@ pub struct ConversationResult {
     pub page: u32,
     pub total_pages: u32,
     pub messages: Vec<MessagePostInfo>,
+    pub meta: ResponseMeta,
 }
 
 /// Send message result.
@@ -135,7 +138,11 @@ pub struct ReplyMessageResult {
 
 /// List message conversations.
 pub async fn list_conversations(client: &NGAClient, page: u32) -> Result<MessageListResult> {
-    let result = client.messages().list(page).await?;
+    let result = client
+        .messages()
+        .list(page)
+        .await
+        .context("listing message conversations")?;
     Ok(MessageListResult {
         page,
         total_pages: result.total_pages,
@@ -151,6 +158,7 @@ pub async fn list_conversations(client: &NGAClient, page: u32) -> Result<Message
                 is_unread: m.is_unread,
             })
             .collect(),
+        meta: ResponseMeta::page_only(page, result.total_pages),
     })
 }
 
@@ -165,7 +173,8 @@ pub async fn read_conversation(
         .conversation(mid)
         .page(page)
         .send()
-        .await?;
+        .await
+        .context("reading message conversation")?;
     Ok(ConversationResult {
         mid: mid.to_string(),
         other_username: result.other_username,
@@ -176,17 +185,14 @@ pub async fn read_conversation(
             .iter()
             .map(|p| MessagePostInfo {
                 id: p.id.clone(),
-                from: if p.is_mine {
-                    t!("you_label").to_string()
-                } else {
-                    p.from_username.clone()
-                },
+                from: p.from_username.clone(),
                 from_uid: p.from_user_id.to_string(),
                 is_mine: p.is_mine,
                 content: p.content.to_plain_text(),
                 time: p.time,
             })
             .collect(),
+        meta: ResponseMeta::page_only(page, result.total_pages),
     })
 }
 
@@ -204,12 +210,35 @@ pub async fn send_message(
         .subject(subject)
         .content(content)
         .send()
-        .await?;
+        .await
+        .context("sending message")?;
 
     Ok(SendMessageResult {
         to: to.to_string(),
         success: true,
     })
+}
+
+/// Send or reply to a message using shared options.
+pub async fn send_with_options(
+    client: &NGAClient,
+    options: crate::handlers::options::SendMessageOptions,
+) -> Result<SendMessageResult> {
+    if let Some(mid) = options.reply_mid {
+        reply_message(client, &mid, &options.content).await?;
+        Ok(SendMessageResult {
+            to: options.to,
+            success: true,
+        })
+    } else {
+        send_message(
+            client,
+            &options.to,
+            &options.subject,
+            &options.content,
+        )
+        .await
+    }
 }
 
 /// Reply to a conversation.
@@ -218,10 +247,30 @@ pub async fn reply_message(
     mid: &str,
     content: &str,
 ) -> Result<ReplyMessageResult> {
-    client.messages().reply(mid).content(content).send().await?;
+    client.messages().reply(mid).content(content).send().await.context("replying to message")?;
 
     Ok(ReplyMessageResult {
         mid: mid.to_string(),
         success: true,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_message_post_info_keeps_username_in_from_field() {
+        let info = MessagePostInfo {
+            id: "1".into(),
+            from: "alice".into(),
+            from_uid: "123".into(),
+            is_mine: true,
+            content: "hello".into(),
+            time: 0,
+        };
+        let json: serde_json::Value = serde_json::to_value(&info).unwrap();
+        assert_eq!(json["from"], "alice");
+        assert_eq!(json["is_mine"], true);
+    }
 }

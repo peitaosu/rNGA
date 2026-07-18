@@ -1,6 +1,6 @@
 //! User handlers.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use colored::Colorize;
 use rnga::NGAClient;
 use rust_i18n::t;
@@ -68,6 +68,7 @@ impl PlainPrint for UserInfo {
 pub struct UserSearchInfo {
     pub id: String,
     pub name: String,
+    pub avatar_url: Option<String>,
 }
 
 impl TableRow for UserSearchInfo {
@@ -91,12 +92,12 @@ pub struct UserTopicsResult {
     pub user_id: String,
     pub page: u32,
     pub total_pages: u32,
-    pub topics: Vec<TopicInfo>,
+    pub topics: Vec<UserTopicSummary>,
 }
 
-/// Topic info for user's topics.
+/// Topic summary for a user's topic history.
 #[derive(Debug, Clone, Serialize)]
-pub struct TopicInfo {
+pub struct UserTopicSummary {
     pub id: String,
     pub subject: String,
     pub replies: i32,
@@ -104,7 +105,7 @@ pub struct TopicInfo {
     pub last_post_date: i64,
 }
 
-impl TableRow for TopicInfo {
+impl TableRow for UserTopicSummary {
     fn headers() -> Vec<&'static str> {
         vec!["ID", "Subject", "Replies", "Last Post"]
     }
@@ -118,7 +119,7 @@ impl TableRow for TopicInfo {
     }
 }
 
-impl PlainPrint for TopicInfo {
+impl PlainPrint for UserTopicSummary {
     fn plain_print(&self) {
         println!(
             "{} {}",
@@ -180,37 +181,50 @@ impl PlainPrint for UserPostInfo {
 
 /// Get user profile by ID.
 pub async fn get_user(client: &NGAClient, user_id: &str) -> Result<UserInfo> {
-    let user = client.users().get(user_id).await?;
+    let user = client.users().get(user_id).await.context("fetching user profile")?;
     Ok(UserInfo::from(&user))
 }
 
 /// Get user profile by username.
 pub async fn get_user_by_name(client: &NGAClient, username: &str) -> Result<UserInfo> {
-    let user = client.users().get_by_name(username).await?;
+    let user = client
+        .users()
+        .get_by_name(username)
+        .await
+        .context("fetching user by name")?;
     Ok(UserInfo::from(&user))
 }
 
 /// Get current authenticated user.
 pub async fn get_me(client: &NGAClient) -> Result<UserInfo> {
-    let user = client.users().me().await?;
+    let user = client.users().me().await.context("fetching current user")?;
     Ok(UserInfo::from(&user))
 }
 
 /// Search users by keyword.
 pub async fn search_users(client: &NGAClient, keyword: &str) -> Result<Vec<UserSearchInfo>> {
-    let results = client.users().search(keyword).await?;
+    let results = client
+        .users()
+        .search(keyword)
+        .await
+        .context("searching users")?;
     Ok(results
         .iter()
         .map(|u| UserSearchInfo {
             id: u.id.to_string(),
             name: u.name.clone(),
+            avatar_url: u.avatar_url.clone(),
         })
         .collect())
 }
 
 /// Get topics posted by a user.
 pub async fn user_topics(client: &NGAClient, user_id: &str, page: u32) -> Result<UserTopicsResult> {
-    let result = client.topics().by_user(user_id, page).await?;
+    let result = client
+        .topics()
+        .by_user(user_id, page)
+        .await
+        .context("fetching user topics")?;
     Ok(UserTopicsResult {
         user_id: user_id.to_string(),
         page,
@@ -218,7 +232,7 @@ pub async fn user_topics(client: &NGAClient, user_id: &str, page: u32) -> Result
         topics: result
             .topics
             .iter()
-            .map(|t| TopicInfo {
+            .map(|t| UserTopicSummary {
                 id: t.id.to_string(),
                 subject: t.subject.content.clone(),
                 replies: t.replies,
@@ -231,7 +245,11 @@ pub async fn user_topics(client: &NGAClient, user_id: &str, page: u32) -> Result
 
 /// Get posts by a user.
 pub async fn user_posts(client: &NGAClient, user_id: &str, page: u32) -> Result<UserPostsResult> {
-    let result = client.posts().by_user(user_id, page).await?;
+    let result = client
+        .posts()
+        .by_user(user_id, page)
+        .await
+        .context("fetching user posts")?;
     Ok(UserPostsResult {
         user_id: user_id.to_string(),
         page,

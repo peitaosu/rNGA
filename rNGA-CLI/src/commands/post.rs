@@ -143,9 +143,9 @@ async fn vote(topic_id: &str, post_id: &str, vote: Vote) -> Result<()> {
 
 async fn hot_replies(topic_id: &str, post_id: &str, format: OutputFormat) -> Result<()> {
     let client = build_client()?;
-    let replies = handlers::hot_replies(&client, topic_id, post_id).await?;
+    let result = handlers::hot_replies(&client, topic_id, post_id).await?;
 
-    if replies.is_empty() {
+    if result.replies.is_empty() {
         if matches!(format, OutputFormat::Plain) {
             println!("{}", t!("no_hot_replies"));
         }
@@ -153,10 +153,10 @@ async fn hot_replies(topic_id: &str, post_id: &str, format: OutputFormat) -> Res
     }
 
     if matches!(format, OutputFormat::Plain) {
-        println!("{}\n", t!("hot_replies_count", count = replies.len()));
+        println!("{}\n", t!("hot_replies_count", count = result.replies.len()));
     }
 
-    print_table(replies, format);
+    print_table(result.replies, format);
     Ok(())
 }
 

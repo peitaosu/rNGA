@@ -22,5 +22,5 @@ Thumbs.db
 !.env.example
 
 # Config files with credentials
-rnga.toml
+config.toml
 

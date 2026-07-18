@@ -93,6 +93,12 @@ pub fn format_relative_time(timestamp: i64) -> String {
     }
 }
 
+/// Encode a value as TOON format.
+pub fn encode_toon<T: Serialize>(value: &T) -> String {
+    let json_value = serde_json::to_value(value).unwrap_or_default();
+    toon_format::encode_default(&json_value).unwrap_or_default()
+}
+
 /// Print a table of items with proper formatting for each output mode.
 pub fn print_table<T: TableRow + Serialize + PlainPrint>(items: Vec<T>, format: OutputFormat) {
     match format {
@@ -103,8 +109,7 @@ pub fn print_table<T: TableRow + Serialize + PlainPrint>(items: Vec<T>, format: 
             );
         }
         OutputFormat::Toon => {
-            let json_value = serde_json::to_value(&items).unwrap_or_default();
-            println!("{}", toon_format::encode_default(&json_value).unwrap_or_default());
+            println!("{}", encode_toon(&items));
         }
         OutputFormat::Table => {
             if items.is_empty() {

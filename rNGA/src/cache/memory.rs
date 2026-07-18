@@ -10,9 +10,10 @@ use std::{
 use super::traits::CacheStorage;
 
 /// In-memory cache with optional TTL support.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MemoryCache {
     data: RwLock<HashMap<String, CacheEntry>>,
+    max_entries: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -34,10 +35,24 @@ impl CacheEntry {
     }
 }
 
+impl Default for MemoryCache {
+    fn default() -> Self {
+        Self::with_capacity(256)
+    }
+}
+
 impl MemoryCache {
     /// Create a new empty cache.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a cache with a maximum entry count.
+    pub fn with_capacity(max_entries: usize) -> Self {
+        Self {
+            data: RwLock::new(HashMap::new()),
+            max_entries: max_entries.max(1),
+        }
     }
 
     /// Remove expired entries.
@@ -62,6 +77,16 @@ impl CacheStorage for MemoryCache {
 
     async fn set(&self, key: &str, value: &[u8], ttl: Option<Duration>) {
         let mut data = self.data.write().unwrap();
+        if data.len() >= self.max_entries && !data.contains_key(key) {
+            if let Some(stale_key) = data
+                .iter()
+                .find_map(|(existing_key, entry)| entry.is_expired().then_some(existing_key.clone()))
+            {
+                data.remove(&stale_key);
+            } else if let Some(first_key) = data.keys().next().cloned() {
+                data.remove(&first_key);
+            }
+        }
         data.insert(key.to_owned(), CacheEntry::new(value.to_vec(), ttl));
     }
 
@@ -128,15 +153,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_clear() {
-        let cache = MemoryCache::new();
+    async fn test_capacity_eviction() {
+        let cache = MemoryCache::with_capacity(2);
 
         cache.set("a", b"1", None).await;
         cache.set("b", b"2", None).await;
+        cache.set("c", b"3", None).await;
 
-        cache.clear().await;
-
-        assert!(cache.get("a").await.is_none());
-        assert!(cache.get("b").await.is_none());
+        assert_eq!(cache.get("c").await, Some(b"3".to_vec()));
+        assert!(cache.get("a").await.is_none() || cache.get("b").await.is_none());
     }
 }

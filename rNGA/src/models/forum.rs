@@ -43,6 +43,15 @@ impl ForumIdKind {
         matches!(self, ForumIdKind::Stid(_))
     }
 
+    /// Create from an ID string and stid flag.
+    pub fn from_stid_flag(id: impl Into<String>, is_stid: bool) -> Self {
+        if is_stid {
+            Self::stid(id)
+        } else {
+            Self::fid(id)
+        }
+    }
+
     /// Get the query parameter name for this ID type.
     pub fn param_name(&self) -> &'static str {
         match self {
@@ -74,10 +83,14 @@ pub struct Forum {
 }
 
 impl Forum {
+    /// Build a forum icon URL from an ID string.
+    pub fn icon_url_for(id: impl AsRef<str>) -> String {
+        format!("{}{}.png", FORUM_ICON_PATH, id.as_ref())
+    }
+
     /// Create a minimal forum with just ID and name.
     pub fn minimal(id: ForumIdKind, name: impl Into<String>) -> Self {
-        let icon_id = id.id();
-        let icon_url = format!("{}{}.png", FORUM_ICON_PATH, icon_id);
+        let icon_url = Self::icon_url_for(id.id());
 
         Self {
             id: Some(id),
