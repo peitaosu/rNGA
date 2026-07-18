@@ -8,7 +8,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rnga = { git = "https://github.com/peitaosu/rNGA" }
+rnga = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
