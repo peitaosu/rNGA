@@ -8,7 +8,10 @@ pub mod models;
 pub mod parser;
 
 // Re-export main types
-pub use client::{AuthInfo, Device, HttpConfig, NGAClient, NGAClientBuilder};
+pub use client::{
+    attachment_preview_url, resolve_attachment_url, AuthInfo, Device, HttpConfig, NGAClient,
+    NGAClientBuilder, ATTACHMENT_CDN_BASE,
+};
 pub use error::{Error, Result};
 
 // Re-export commonly used models

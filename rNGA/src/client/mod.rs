@@ -4,7 +4,10 @@ mod auth;
 mod http;
 
 pub use auth::AuthInfo;
-pub use http::{Device, HttpConfig, FORUM_ICON_PATH};
+pub use http::{
+    attachment_preview_url, resolve_attachment_url, Device, HttpConfig, FORUM_ICON_PATH,
+    ATTACHMENT_CDN_BASE,
+};
 
 use crate::api::{ForumApi, MessageApi, NotificationApi, PostApi, TopicApi, UserApi};
 use crate::cache::CacheStorage;

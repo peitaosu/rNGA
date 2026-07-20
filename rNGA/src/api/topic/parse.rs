@@ -1,4 +1,5 @@
 use crate::{
+    client::{attachment_preview_url, resolve_attachment_url},
     error::{Error, Result},
     models::{
         Attachment, AttachmentKind, Forum, ForumIdKind, Post, Subject, Topic, TopicType, User,
@@ -258,6 +259,10 @@ fn parse_attachment(node: &XmlNode<'_>) -> Option<Attachment> {
         return None;
     }
 
+    let raw_url = url.clone();
+    let resolved_url = resolve_attachment_url(&raw_url);
+    let thumb_url = attachment_preview_url(&raw_url, attrs.get("thumb").map(String::as_str));
+
     let explicit_type = attrs.get("type").cloned().unwrap_or_default();
     let name = attrs.get("name").cloned().unwrap_or_default();
     let ext = attrs.get("ext").cloned().unwrap_or_else(|| {
@@ -285,12 +290,14 @@ fn parse_attachment(node: &XmlNode<'_>) -> Option<Attachment> {
         }
     });
 
-    let thumb_url = attrs.get("thumb").cloned().filter(|s| !s.is_empty());
-
     Some(Attachment {
-        url: url.clone(),
+        url: resolved_url,
         name: if name.is_empty() {
-            url.rsplit('/').next().unwrap_or("attachment").to_owned()
+            raw_url
+                .rsplit('/')
+                .next()
+                .unwrap_or("attachment")
+                .to_owned()
         } else {
             name
         },

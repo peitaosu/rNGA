@@ -1,6 +1,6 @@
 use crate::handlers::topic::{PostInfo, TopicSummary};
 use crate::tui::search::FilterQuery;
-use super::state::{ForumRow, ThreadLayout};
+use super::state::ForumRow;
 
 pub(crate) fn forum_row_matches(row: &ForumRow, query: &FilterQuery<'_>) -> bool {
     match row {
@@ -23,6 +23,7 @@ pub(crate) fn topic_matches(topic: &TopicSummary, query: &FilterQuery<'_>) -> bo
 
 pub(crate) fn post_matches(post: &PostInfo, query: &FilterQuery<'_>) -> bool {
     let floor = post.floor.to_string();
+    let attachment_names: Vec<&str> = post.attachments.iter().map(|item| item.name.as_str()).collect();
     query.matches_any([
         post.author.as_str(),
         post.author_id.as_str(),
@@ -30,6 +31,7 @@ pub(crate) fn post_matches(post: &PostInfo, query: &FilterQuery<'_>) -> bool {
         post.content_raw.as_str(),
         floor.as_str(),
         post.post_id.as_str(),
+        &attachment_names.join(" "),
     ])
 }
 
@@ -101,19 +103,4 @@ pub(crate) fn restore_post_index(posts: &[PostInfo], post_id: Option<&str>) -> u
         .iter()
         .position(|post| post.post_id == post_id)
         .unwrap_or(0)
-}
-
-pub fn thread_layout_for(posts: &[PostInfo]) -> ThreadLayout {
-    let mut post_starts = Vec::new();
-    let mut line_count = 0usize;
-    for post in posts {
-        post_starts.push(line_count);
-        line_count += 1;
-        line_count += post.content.lines().count().max(1);
-        line_count += 1;
-    }
-    ThreadLayout {
-        post_starts,
-        line_count,
-    }
 }

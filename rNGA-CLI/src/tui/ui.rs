@@ -1,16 +1,18 @@
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 use rust_i18n::t;
 
-use crate::handlers::topic::{CliTopicDetailsResult, PostInfo, TopicSummary};
+use crate::handlers::topic::{CliTopicDetailsResult, TopicSummary};
 use crate::output::format_relative_time;
 
 use super::app::{App, ForumRow, InputMode, Pane, SEARCH_FIELD_HEIGHT, FORUMS_WIDTH, TOPICS_WIDTH};
+use super::thread_view;
+use super::theme::UiTheme;
 
-pub fn draw(frame: &mut Frame, app: &App) {
+pub fn draw(frame: &mut Frame, app: &mut App, theme: UiTheme) {
     let area = frame.area();
     let rows = Layout::vertical([
         Constraint::Min(1),
@@ -25,40 +27,37 @@ pub fn draw(frame: &mut Frame, app: &App) {
     ])
     .split(rows[0]);
 
-    draw_forums(frame, cols[0], app);
-    draw_topics(frame, cols[1], app);
-    draw_thread(frame, cols[2], app);
-    draw_status(frame, rows[1], app);
+    draw_forums(frame, cols[0], app, theme);
+    draw_topics(frame, cols[1], app, theme);
+    draw_thread(frame, cols[2], app, theme);
+    draw_status(frame, rows[1], app, theme);
 }
 
-fn pane_border(title: &str, focused: bool) -> Block<'static> {
-    let style = if focused {
-        Style::default().fg(Color::Cyan)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
+fn pane_border(title: &str, focused: bool, theme: UiTheme) -> Block<'static> {
+    let style = if focused { theme.focus() } else { theme.border() };
     Block::default()
         .borders(Borders::ALL)
         .border_style(style)
         .title(format!(" {title} "))
+        .title_style(style)
 }
 
-fn draw_forums(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_forums(frame: &mut Frame, area: Rect, app: &App, theme: UiTheme) {
     let focused = app.focus == Pane::Forums;
     let title = t!("tui_pane_forums");
-    let block = pane_border(&title, focused);
+    let block = pane_border(&title, focused, theme);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     let rows = split_pane(inner, app.search_visible(Pane::Forums));
     let list_area = rows.body;
     if let Some(search_area) = rows.search {
-        draw_search_field(frame, search_area, app, Pane::Forums);
+        draw_search_field(frame, search_area, app, Pane::Forums, theme);
     }
 
     if app.forum_rows.is_empty() && app.forums_fetching {
         frame.render_widget(
-            Paragraph::new(t!("tui_loading")).style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new(t!("tui_loading")).style(theme.dim()),
             list_area,
         );
         return;
@@ -66,7 +65,7 @@ fn draw_forums(frame: &mut Frame, area: Rect, app: &App) {
 
     if app.forum_rows.is_empty() {
         frame.render_widget(
-            Paragraph::new(t!("tui_no_forums")).style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new(t!("tui_no_forums")).style(theme.dim()),
             list_area,
         );
         return;
@@ -76,13 +75,12 @@ fn draw_forums(frame: &mut Frame, area: Rect, app: &App) {
     let items: Vec<ListItem> = if filtering {
         app.visible_forum_indices()
             .iter()
-            .map(|&index| forum_row_item(&app.forum_rows[index], index == app.forum_index))
+            .map(|&index| forum_row_item(&app.forum_rows[index], theme))
             .collect()
     } else {
         app.forum_rows
             .iter()
-            .enumerate()
-            .map(|(index, row)| forum_row_item(row, index == app.forum_index))
+            .map(|row| forum_row_item(row, theme))
             .collect()
     };
 
@@ -95,38 +93,30 @@ fn draw_forums(frame: &mut Frame, area: Rect, app: &App) {
         app.forum_index
     };
     let mut state = ListState::default().with_selected(Some(selected));
-    let list = List::new(items).highlight_style(
-        Style::default()
-            .bg(Color::DarkGray)
-            .add_modifier(Modifier::BOLD),
-    );
+    let list = List::new(items).highlight_style(theme.selected());
     frame.render_stateful_widget(list, list_area, &mut state);
 }
 
-fn forum_row_item(row: &ForumRow, selected: bool) -> ListItem<'static> {
+fn forum_row_item(row: &ForumRow, theme: UiTheme) -> ListItem<'static> {
     match row {
         ForumRow::Header(name) => ListItem::new(Line::from(Span::styled(
             name.clone(),
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
+            theme.section(),
         ))),
-        ForumRow::Favorite(info) => forum_item(&info.name, true, selected),
-        ForumRow::Forum(info) => forum_item(&info.name, false, selected),
+        ForumRow::Favorite(info) => forum_item(&info.name, true, theme),
+        ForumRow::Forum(info) => forum_item(&info.name, false, theme),
     }
 }
 
-fn forum_item(name: &str, favorite: bool, selected: bool) -> ListItem<'static> {
+fn forum_item(name: &str, favorite: bool, theme: UiTheme) -> ListItem<'static> {
     let prefix = if favorite { "★ " } else { "  " };
-    let style = if selected {
-        Style::default()
-    } else {
-        Style::default().fg(Color::Gray)
-    };
-    ListItem::new(Line::from(Span::styled(format!("{prefix}{name}"), style)))
+    ListItem::new(Line::from(Span::styled(
+        format!("{prefix}{name}"),
+        theme.text(),
+    )))
 }
 
-fn draw_topics(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_topics(frame: &mut Frame, area: Rect, app: &App, theme: UiTheme) {
     let focused = app.focus == Pane::Topics;
     let default_title = t!("tui_pane_topics");
     let title = app
@@ -134,19 +124,19 @@ fn draw_topics(frame: &mut Frame, area: Rect, app: &App) {
         .as_ref()
         .map(|forum| forum.name.as_str())
         .unwrap_or(&default_title);
-    let block = pane_border(title, focused);
+    let block = pane_border(title, focused, theme);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     let rows = split_pane(inner, app.search_visible(Pane::Topics));
     let list_area = rows.body;
     if let Some(search_area) = rows.search {
-        draw_search_field(frame, search_area, app, Pane::Topics);
+        draw_search_field(frame, search_area, app, Pane::Topics, theme);
     }
 
     if app.selected_forum.is_none() {
         frame.render_widget(
-            Paragraph::new(t!("tui_select_forum")).style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new(t!("tui_select_forum")).style(theme.dim()),
             list_area,
         );
         return;
@@ -154,7 +144,7 @@ fn draw_topics(frame: &mut Frame, area: Rect, app: &App) {
 
     if app.topics.is_empty() && app.topics_fetching {
         frame.render_widget(
-            Paragraph::new(t!("tui_loading")).style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new(t!("tui_loading")).style(theme.dim()),
             list_area,
         );
         return;
@@ -174,7 +164,7 @@ fn draw_topics(frame: &mut Frame, area: Rect, app: &App) {
             t!("tui_no_topics")
         };
         frame.render_widget(
-            Paragraph::new(message).style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new(message).style(theme.dim()),
             list_area,
         );
         return;
@@ -185,7 +175,7 @@ fn draw_topics(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .map(|&index| {
             let topic = &app.topics[index];
-            topic_item(topic, index == app.topic_index, list_width)
+            topic_item(topic, index == app.topic_index, list_width, theme)
         })
         .collect();
 
@@ -194,15 +184,11 @@ fn draw_topics(frame: &mut Frame, area: Rect, app: &App) {
         .position(|&index| index == app.topic_index)
         .unwrap_or(0);
     let mut state = ListState::default().with_selected(Some(selected));
-    let list = List::new(items).highlight_style(
-        Style::default()
-            .bg(Color::DarkGray)
-            .add_modifier(Modifier::BOLD),
-    );
+    let list = List::new(items).highlight_style(theme.selected());
     frame.render_stateful_widget(list, list_area, &mut state);
 }
 
-fn topic_item(topic: &TopicSummary, selected: bool, width: usize) -> ListItem<'static> {
+fn topic_item(topic: &TopicSummary, selected: bool, width: usize, theme: UiTheme) -> ListItem<'static> {
     let tags = if topic.tags.is_empty() {
         String::new()
     } else {
@@ -216,33 +202,29 @@ fn topic_item(topic: &TopicSummary, selected: bool, width: usize) -> ListItem<'s
         replies = topic.replies
     )
     .into_owned();
-    let subject_style = if selected {
-        Style::default().add_modifier(Modifier::BOLD)
-    } else {
-        Style::default()
-    };
-    let meta_style = Style::default().fg(Color::DarkGray);
+    let subject_style = if selected { theme.focus() } else { theme.text() };
+    let meta_style = theme.dim();
     let mut lines = styled_wrap(&subject, width, subject_style);
     lines.extend(styled_wrap(&meta, width, meta_style));
     ListItem::new(lines)
 }
 
-fn draw_thread(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_thread(frame: &mut Frame, area: Rect, app: &mut App, theme: UiTheme) {
     let focused = app.focus == Pane::Thread;
     let title = t!("tui_pane_thread");
-    let block = pane_border(&title, focused);
+    let block = pane_border(&title, focused, theme);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     let rows = split_pane(inner, app.search_visible(Pane::Thread));
     let content = rows.body;
     if let Some(search_area) = rows.search {
-        draw_search_field(frame, search_area, app, Pane::Thread);
+        draw_search_field(frame, search_area, app, Pane::Thread, theme);
     }
 
     if app.thread.is_none() && app.thread_fetching {
         frame.render_widget(
-            Paragraph::new(t!("tui_loading")).style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new(t!("tui_loading")).style(theme.dim()),
             content,
         );
         return;
@@ -250,7 +232,7 @@ fn draw_thread(frame: &mut Frame, area: Rect, app: &App) {
 
     let Some(thread) = &app.thread else {
         frame.render_widget(
-            Paragraph::new(t!("tui_select_topic")).style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new(t!("tui_select_topic")).style(theme.dim()),
             content,
         );
         return;
@@ -263,11 +245,11 @@ fn draw_thread(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .split(content);
 
-    draw_thread_header(frame, body[0], thread);
-    draw_thread_body(frame, body[1], app, thread);
+    draw_thread_header(frame, body[0], thread, theme);
+    draw_thread_body(frame, body[1], app, theme);
 }
 
-fn draw_thread_header(frame: &mut Frame, area: Rect, thread: &CliTopicDetailsResult) {
+fn draw_thread_header(frame: &mut Frame, area: Rect, thread: &CliTopicDetailsResult, theme: UiTheme) {
     let tags = if thread.tags.is_empty() {
         String::new()
     } else {
@@ -282,14 +264,14 @@ fn draw_thread_header(frame: &mut Frame, area: Rect, thread: &CliTopicDetailsRes
         total = thread.total_pages
     );
     let paragraph = Paragraph::new(vec![
-        Line::from(Span::styled(title, Style::default().add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled(meta, Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(title, theme.focus())),
+        Line::from(Span::styled(meta, theme.dim())),
     ]);
     frame.render_widget(paragraph, area);
 }
 
-fn draw_thread_body(frame: &mut Frame, area: Rect, app: &App, thread: &CliTopicDetailsResult) {
-    let posts = app.filtered_thread_posts(thread);
+fn draw_thread_body(frame: &mut Frame, area: Rect, app: &mut App, theme: UiTheme) {
+    let posts = app.displayed_thread_posts();
     if posts.is_empty() {
         let message = if app.filter_active(Pane::Thread) {
             t!("tui_no_match")
@@ -297,63 +279,29 @@ fn draw_thread_body(frame: &mut Frame, area: Rect, app: &App, thread: &CliTopicD
             t!("tui_no_posts")
         };
         frame.render_widget(
-            Paragraph::new(message).style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new(message).style(theme.dim()),
             area,
         );
         return;
     }
 
-    let width = area.width.saturating_sub(2) as usize;
-    let mut rendered: Vec<Line> = Vec::new();
-    for (post_index, post) in posts.iter().enumerate() {
-        let selected = post_index == app.thread_post_index;
-        rendered.push(post_header_line(post, selected));
-        for line in post.content.lines() {
-            if line.trim().is_empty() {
-                rendered.push(Line::from(""));
-            } else {
-                for part in wrap_line(line, width, 4) {
-                    rendered.push(part);
-                }
-            }
-        }
-        rendered.push(Line::from(""));
-    }
+    let width = area.width.max(1);
+    app.update_thread_body_width(width);
 
-    let paragraph = Paragraph::new(rendered)
-        .wrap(Wrap { trim: false })
-        .scroll((app.thread_scroll, 0));
-    frame.render_widget(paragraph, area);
-}
-
-fn post_header_line(post: &PostInfo, selected: bool) -> Line<'static> {
-    let score = if post.score != 0 {
-        format!(" ▲{}", post.score)
-    } else {
-        String::new()
-    };
-    let comments = if post.comment_count > 0 {
-        format!(" 💬{}", post.comment_count)
-    } else {
-        String::new()
-    };
-    let text = format!(
-        "#{} {} · {} · {}{}{}",
-        post.floor,
-        post.author,
-        format_relative_time(post.post_date),
-        post.author_id,
-        score,
-        comments
+    let content_width = width.saturating_sub(2) as usize;
+    let blocks = thread_view::build_thread_blocks(
+        &posts,
+        app.thread_post_index,
+        content_width,
+        theme,
     );
-    let style = if selected {
-        Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::Cyan)
-    };
-    Line::from(Span::styled(text, style))
+    thread_view::draw_thread_blocks(
+        frame,
+        area,
+        app.thread_scroll,
+        &blocks,
+        theme,
+    );
 }
 
 fn styled_wrap(text: &str, width: usize, style: Style) -> Vec<Line<'static>> {
@@ -397,7 +345,7 @@ fn wrap_line(text: &str, width: usize, indent: usize) -> Vec<Line<'static>> {
     lines
 }
 
-fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_status(frame: &mut Frame, area: Rect, app: &App, theme: UiTheme) {
     let auth = if app.auth.authenticated {
         app.auth
             .uid
@@ -412,8 +360,8 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
         Pane::Topics => t!("tui_focus_topics"),
         Pane::Thread => t!("tui_focus_thread"),
     };
-    let context_style = Style::default().fg(Color::Gray);
-    let hint_style = Style::default().fg(Color::DarkGray);
+    let context_style = theme.dim();
+    let hint_style = theme.dim();
     let mut meta_spans = vec![Span::raw(format!(" {auth} │ {pane}"))];
     for part in app.status_context() {
         meta_spans.push(Span::raw(" │ "));
@@ -421,7 +369,7 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
     }
     if let Some(error) = &app.status {
         meta_spans.push(Span::raw(" │ "));
-        meta_spans.push(Span::styled(error.clone(), Style::default().fg(Color::Red)));
+        meta_spans.push(Span::styled(error.clone(), theme.error()));
     }
 
     let mut hint_spans = vec![
@@ -429,7 +377,7 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
         Span::styled(" | ", hint_style),
     ];
     let auto_style = if app.auto_refresh {
-        Style::default().fg(Color::Black).bg(Color::Cyan)
+        theme.auto_refresh()
     } else {
         hint_style
     };
@@ -440,7 +388,7 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
 
     let meta_width = spans_width(&meta_spans);
     let hint_width = spans_width(&hint_spans);
-    let pad = area.width as usize - meta_width - hint_width;
+    let pad = (area.width as usize).saturating_sub(meta_width + hint_width);
     let mut spans = meta_spans;
     if pad > 0 {
         spans.push(Span::raw(" ".repeat(pad)));
@@ -479,12 +427,12 @@ fn split_pane(area: Rect, show_search: bool) -> PaneAreas {
     }
 }
 
-fn draw_search_field(frame: &mut Frame, area: Rect, app: &App, pane: Pane) {
+fn draw_search_field(frame: &mut Frame, area: Rect, app: &App, pane: Pane, theme: UiTheme) {
     let editing = matches!(app.input_mode, InputMode::Search(active) if active == pane);
     let border_style = if editing {
-        Style::default().fg(Color::Yellow)
+        theme.search_border_editing()
     } else {
-        Style::default().fg(Color::Cyan)
+        theme.search_border()
     };
     let filter_title = format!(" {} ", t!("tui_filter"));
     let block = Block::default()
@@ -496,7 +444,7 @@ fn draw_search_field(frame: &mut Frame, area: Rect, app: &App, pane: Pane) {
 
     let display = format!("{}{}", app.search_input, "▌");
     frame.render_widget(
-        Paragraph::new(display).style(Style::default().fg(Color::White)),
+        Paragraph::new(display).style(theme.text()),
         inner,
     );
 }

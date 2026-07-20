@@ -16,6 +16,38 @@ pub const DEFAULT_BASE_URL: &str = "https://ngabbs.com/";
 
 pub const FORUM_ICON_PATH: &str = "http://img4.ngacn.cc/ngabbs/nga_classic/f/app/";
 
+pub const ATTACHMENT_CDN_BASE: &str = "https://img.nga.178.com/attachments";
+
+pub fn resolve_attachment_url(url: &str) -> String {
+    let trimmed = url.trim();
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return trimmed.to_owned();
+    }
+    if let Some(rest) = trimmed.strip_prefix("./") {
+        return format!("{ATTACHMENT_CDN_BASE}/{rest}");
+    }
+    if trimmed.starts_with('/') {
+        return format!("https://img.nga.178.com{trimmed}");
+    }
+    format!("{ATTACHMENT_CDN_BASE}/{trimmed}")
+}
+
+pub fn attachment_preview_url(url: &str, thumb: Option<&str>) -> Option<String> {
+    if let Some(value) = thumb.filter(|entry| !entry.is_empty()) {
+        if value.starts_with("http://")
+            || value.starts_with("https://")
+            || value.starts_with("./")
+            || value.starts_with('/')
+        {
+            return Some(resolve_attachment_url(value));
+        }
+        if value.chars().all(|ch| ch.is_ascii_digit()) {
+            return Some(resolve_attachment_url(&format!("{url}.thumb.jpg")));
+        }
+    }
+    Some(resolve_attachment_url(&format!("{url}.thumb.jpg")))
+}
+
 const MAX_HTTP_ATTEMPTS: u32 = 3;
 const RETRY_BASE_DELAY_MS: u64 = 150;
 
@@ -344,5 +376,21 @@ mod tests {
     fn test_parse_json_response_unwraps_data() {
         let value = parse_json_response(r#"{"code":0,"data":{"result":[]}}"#).unwrap();
         assert!(value.get("result").is_some());
+    }
+
+    #[test]
+    fn test_resolve_attachment_url_relative() {
+        assert_eq!(
+            resolve_attachment_url("./mon_202607/20/foo.jpg"),
+            "https://img.nga.178.com/attachments/mon_202607/20/foo.jpg"
+        );
+    }
+
+    #[test]
+    fn test_attachment_preview_url_from_flag() {
+        assert_eq!(
+            attachment_preview_url("./mon_202607/20/foo.jpg", Some("1")),
+            Some("https://img.nga.178.com/attachments/mon_202607/20/foo.jpg.thumb.jpg".into())
+        );
     }
 }

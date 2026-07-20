@@ -3,6 +3,7 @@
 mod commands;
 mod config;
 mod handlers;
+mod locale;
 mod mcp;
 mod output;
 mod tui;
@@ -13,7 +14,7 @@ use commands::{forum, message, notification, post, topic, user};
 use rnga::AuthInfo;
 use rust_i18n::t;
 
-rust_i18n::i18n!("src/locales", fallback = "en");
+rust_i18n::i18n!("src/locales", fallback = "zh-CN");
 
 /// NGA Forum CLI and MCP Server
 #[derive(Parser)]
@@ -30,8 +31,8 @@ struct Cli {
     verbose: bool,
 
     /// Language for output (en, zh-CN)
-    #[arg(short, long, global = true, default_value = "en")]
-    lang: String,
+    #[arg(short, long, global = true)]
+    lang: Option<String>,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -129,7 +130,7 @@ enum AuthAction {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    rust_i18n::set_locale(&cli.lang);
+    rust_i18n::set_locale(&locale::resolve(cli.lang.as_deref()));
 
     if cli.mcp {
         tracing_subscriber::fmt()
@@ -143,21 +144,17 @@ async fn main() -> Result<()> {
         return mcp::run_server().await;
     }
 
-    let command = cli
-        .command
-        .ok_or_else(|| anyhow::anyhow!("{}", t!("no_command")))?;
-
-    match command {
-        Commands::Auth { action } => handle_auth(action).await,
-        Commands::Forum { action } => forum::handle(action, cli.format, cli.verbose).await,
-        Commands::Topic { action } => topic::handle(action, cli.format, cli.verbose).await,
-        Commands::Post { action } => post::handle(action, cli.format, cli.verbose).await,
-        Commands::User { action } => user::handle(action, cli.format, cli.verbose).await,
-        Commands::Notification { action } => {
+    match cli.command {
+        Some(Commands::Auth { action }) => handle_auth(action).await,
+        Some(Commands::Forum { action }) => forum::handle(action, cli.format, cli.verbose).await,
+        Some(Commands::Topic { action }) => topic::handle(action, cli.format, cli.verbose).await,
+        Some(Commands::Post { action }) => post::handle(action, cli.format, cli.verbose).await,
+        Some(Commands::User { action }) => user::handle(action, cli.format, cli.verbose).await,
+        Some(Commands::Notification { action }) => {
             notification::handle(action, cli.format, cli.verbose).await
         }
-        Commands::Message { action } => message::handle(action, cli.format, cli.verbose).await,
-        Commands::Config => {
+        Some(Commands::Message { action }) => message::handle(action, cli.format, cli.verbose).await,
+        Some(Commands::Config) => {
             let cfg = config::load_config()?;
             println!(
                 "{}",
@@ -169,11 +166,12 @@ async fn main() -> Result<()> {
             }
             Ok(())
         }
-        Commands::Tui {
+        Some(Commands::Tui {
             forum,
             stid,
             topic,
-        } => tui::run(forum, stid, topic).await,
+        }) => tui::run(forum, stid, topic).await,
+        None => tui::run(None, false, None).await,
     }
 }
 

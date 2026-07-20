@@ -1,5 +1,6 @@
 use colored::Colorize;
-use rnga::models::{FavoriteFolder, Post, Topic};
+use rnga::models::{Attachment, AttachmentKind, FavoriteFolder, Post, Topic};
+use rnga::{attachment_preview_url, resolve_attachment_url};
 use rust_i18n::t;
 use serde::Serialize;
 
@@ -67,6 +68,35 @@ impl PlainPrint for TopicSummary {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct AttachmentInfo {
+    pub url: String,
+    pub name: String,
+    pub size: i64,
+    pub kind: AttachmentKind,
+    pub thumb_url: Option<String>,
+    pub dimensions: Option<(u32, u32)>,
+}
+
+impl From<&Attachment> for AttachmentInfo {
+    fn from(attachment: &Attachment) -> Self {
+        let url = resolve_attachment_url(&attachment.url);
+        let thumb_url = attachment
+            .thumb_url
+            .as_ref()
+            .map(|value| resolve_attachment_url(value))
+            .or_else(|| attachment_preview_url(&attachment.url, None));
+        Self {
+            url,
+            name: attachment.name.clone(),
+            size: attachment.size,
+            kind: attachment.kind,
+            thumb_url,
+            dimensions: attachment.dimensions,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct PostInfo {
     pub floor: i32,
     pub post_id: String,
@@ -79,6 +109,7 @@ pub struct PostInfo {
     pub score: i32,
     pub post_date: i64,
     pub comment_count: i32,
+    pub attachments: Vec<AttachmentInfo>,
 }
 
 impl From<&Post> for PostInfo {
@@ -96,7 +127,23 @@ impl From<&Post> for PostInfo {
             score: p.score,
             post_date: p.post_date,
             comment_count: p.comment_count,
+            attachments: p.attachments.iter().map(AttachmentInfo::from).collect(),
         }
+    }
+}
+
+fn format_attachment_size(size: i64) -> String {
+    if size <= 0 {
+        return String::new();
+    }
+    const KB: i64 = 1024;
+    const MB: i64 = KB * 1024;
+    if size >= MB {
+        format!("{:.1} MB", size as f64 / MB as f64)
+    } else if size >= KB {
+        format!("{:.0} KB", size as f64 / KB as f64)
+    } else {
+        format!("{size} B")
     }
 }
 
@@ -136,6 +183,21 @@ impl PlainPrint for PostInfo {
             if !line.trim().is_empty() {
                 println!("     {}", line);
             }
+        }
+        for attachment in &self.attachments {
+            let size = format_attachment_size(attachment.size);
+            let label = if attachment.kind == AttachmentKind::Image {
+                if size.is_empty() {
+                    format!("[img] {}", attachment.name)
+                } else {
+                    format!("[img] {} · {}", attachment.name, size)
+                }
+            } else if size.is_empty() {
+                format!("[file] {}", attachment.name)
+            } else {
+                format!("[file] {} · {}", attachment.name, size)
+            };
+            println!("     {}", label.dimmed());
         }
         println!();
     }

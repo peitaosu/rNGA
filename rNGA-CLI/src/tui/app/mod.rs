@@ -7,11 +7,13 @@ use std::time::Instant;
 use crate::config::{auth_status, build_client, AuthStatus};
 use crate::handlers::forum::ForumInfo;
 use crate::handlers::topic::{CliTopicDetailsResult, PostInfo, TopicSummary};
+use crate::tui::thread_view;
+use crate::tui::theme::UiTheme;
 use rust_i18n::t;
 use rnga::NGAClient;
 use tokio::sync::mpsc;
 
-pub use filter::{thread_layout_for, visible_forum_indices};
+pub use filter::visible_forum_indices;
 pub use state::*;
 
 use filter::{post_matches, restore_forum_index, restore_post_index, restore_topic_index, topic_matches};
@@ -52,7 +54,9 @@ pub struct App {
     pub thread_post_index: usize,
     pub thread_scroll: u16,
     pub thread_fetching: bool,
+    pub thread_body_width: u16,
     thread_generation: u64,
+    pending_thread_focus: bool,
 }
 
 impl App {
@@ -90,7 +94,9 @@ impl App {
             thread_post_index: 0,
             thread_scroll: 0,
             thread_fetching: false,
+            thread_body_width: 0,
             thread_generation: 0,
+            pending_thread_focus: false,
         }
     }
 
@@ -167,16 +173,26 @@ impl App {
                         } else {
                             None
                         };
-                        self.thread_layout = thread_layout_for(&details.posts);
                         self.thread = Some(details);
                         if let Some(thread) = self.thread.as_ref() {
                             self.thread_post_index =
                                 restore_post_index(&thread.posts, prev_post_id.as_deref());
                         }
+                        self.rebuild_thread_layout();
                         self.scroll_to_post();
                         self.status = None;
+                        if self.pending_thread_focus {
+                            self.focus = Pane::Thread;
+                            self.pending_thread_focus = false;
+                        }
                     }
-                    Err(error) => self.status = Some(error),
+                    Err(error) => {
+                        self.status = Some(error);
+                        if self.thread.is_none() {
+                            self.focus = Pane::Topics;
+                            self.pending_thread_focus = false;
+                        }
+                    }
                 }
             }
         }
@@ -246,6 +262,7 @@ impl App {
         if let (Pane::Thread, Some(post_id)) = (pane, post_id) {
             if let Some(thread) = &self.thread {
                 self.thread_post_index = restore_post_index(&thread.posts, Some(&post_id));
+                self.rebuild_thread_layout();
                 self.scroll_to_post();
             }
         }
@@ -290,12 +307,14 @@ impl App {
                 if visible == 0 {
                     self.thread_post_index = 0;
                     self.thread_scroll = 0;
+                    self.rebuild_thread_layout();
                     return;
                 }
                 if self.thread_post_index >= visible {
                     self.thread_post_index = visible - 1;
-                    self.scroll_to_post();
                 }
+                self.rebuild_thread_layout();
+                self.scroll_to_post();
             }
         }
     }
@@ -424,7 +443,7 @@ impl App {
                             .into_owned(),
                     );
                 }
-                if self.topics_fetching {
+                if self.topics_fetching || (self.pending_thread_focus && self.thread_fetching) {
                     parts.push(t!("tui_loading").into_owned());
                 }
             }
@@ -462,6 +481,7 @@ impl App {
     }
 
     pub fn next_pane(&mut self) {
+        self.clear_pending_thread_focus_if_leaving_topics();
         self.focus = match self.focus {
             Pane::Forums => Pane::Topics,
             Pane::Topics => Pane::Thread,
@@ -470,6 +490,7 @@ impl App {
     }
 
     pub fn prev_pane(&mut self) {
+        self.clear_pending_thread_focus_if_leaving_topics();
         self.focus = match self.focus {
             Pane::Forums => Pane::Thread,
             Pane::Topics => Pane::Forums,
@@ -600,13 +621,15 @@ impl App {
     pub fn activate(&mut self) {
         match self.focus {
             Pane::Forums => {
-                if let Some(row) = self.forum_rows.get(self.forum_index) {
-                    self.select_forum_row(row.clone());
+                if let Some(row) = self.selectable_forum_row() {
+                    self.select_forum_row(row);
                 }
             }
             Pane::Topics => {
-                if let Some(topic_id) = self.topics.get(self.topic_index).map(|topic| topic.id.clone()) {
-                    self.open_topic(&topic_id);
+                if let Some(topic_id) = self.selected_topic_id() {
+                    self.request_topic(&topic_id);
+                } else {
+                    self.clear_thread();
                 }
             }
             Pane::Thread => {}
@@ -749,18 +772,77 @@ impl App {
     }
 
     pub fn open_forum(&mut self, forum_id: &str, is_stid: bool) {
+        let changing = self
+            .selected_forum
+            .as_ref()
+            .is_none_or(|forum| forum.id != forum_id);
         self.selected_forum = Some(SelectedForum {
             id: forum_id.to_string(),
             is_stid,
             name: forum_id.to_string(),
         });
         self.focus = Pane::Topics;
+        if changing {
+            self.topics.clear();
+            self.topic_page = 1;
+            self.topic_index = 0;
+            self.clear_thread();
+        }
         self.load_topics(forum_id, is_stid, 1);
     }
 
     pub fn open_topic(&mut self, topic_id: &str) {
-        self.focus = Pane::Thread;
+        self.request_topic(topic_id);
+    }
+
+    pub fn request_topic(&mut self, topic_id: &str) {
+        self.prepare_thread_navigation(topic_id);
+        self.pending_thread_focus = true;
         self.load_thread(topic_id, 1);
+    }
+
+    fn clear_pending_thread_focus_if_leaving_topics(&mut self) {
+        if self.focus == Pane::Topics {
+            self.pending_thread_focus = false;
+        }
+    }
+
+    fn selectable_forum_row(&self) -> Option<ForumRow> {
+        if let Some(row) = self.forum_rows.get(self.forum_index) {
+            if !matches!(row, ForumRow::Header(_)) {
+                return Some(row.clone());
+            }
+        }
+        self.visible_forum_indices().iter().find_map(|&index| {
+            self.forum_rows.get(index).and_then(|row| match row {
+                ForumRow::Header(_) => None,
+                _ => Some(row.clone()),
+            })
+        })
+    }
+
+    fn selected_topic_id(&self) -> Option<String> {
+        self.topics
+            .get(self.topic_index)
+            .map(|topic| topic.id.clone())
+    }
+
+    fn prepare_thread_navigation(&mut self, topic_id: &str) {
+        if self
+            .thread
+            .as_ref()
+            .is_none_or(|thread| thread.topic_id != topic_id)
+        {
+            self.clear_thread();
+        }
+    }
+
+    fn clear_thread(&mut self) {
+        self.thread = None;
+        self.thread_layout = ThreadLayout::default();
+        self.thread_post_index = 0;
+        self.thread_scroll = 0;
+        self.pending_thread_focus = false;
     }
 
     fn select_forum_row(&mut self, row: ForumRow) {
@@ -775,10 +857,23 @@ impl App {
             }
             ForumRow::Header(_) => return,
         };
-        self.selected_forum = Some(SelectedForum { id, is_stid, name });
+        let changing = self
+            .selected_forum
+            .as_ref()
+            .is_none_or(|forum| forum.id != id);
+        self.selected_forum = Some(SelectedForum {
+            id: id.clone(),
+            is_stid,
+            name,
+        });
         self.focus = Pane::Topics;
-        let forum_id = self.selected_forum.as_ref().unwrap().id.clone();
-        self.load_topics(&forum_id, is_stid, 1);
+        if changing {
+            self.topics.clear();
+            self.topic_page = 1;
+            self.topic_index = 0;
+            self.clear_thread();
+        }
+        self.load_topics(&id, is_stid, 1);
     }
 
     fn current_post_id(&self) -> Option<String> {
@@ -797,21 +892,49 @@ impl App {
     }
 
     fn scroll_to_post(&mut self) {
-        let Some(thread) = self.thread.clone() else {
+        let posts = self.displayed_thread_posts();
+        if posts.is_empty() {
             return;
+        }
+        if let Some(start) = self.thread_layout.post_starts.get(self.thread_post_index) {
+            self.thread_scroll = *start as u16;
+        }
+    }
+
+    pub fn displayed_thread_posts(&self) -> Vec<PostInfo> {
+        let Some(thread) = &self.thread else {
+            return Vec::new();
         };
-        let posts: Vec<PostInfo> = if self.filter_active(Pane::Thread) {
-            self.filtered_thread_posts(&thread)
+        if self.filter_active(Pane::Thread) {
+            self.filtered_thread_posts(thread)
                 .into_iter()
                 .cloned()
                 .collect()
         } else {
             thread.posts.clone()
-        };
-        let layout = thread_layout_for(&posts);
-        if let Some(start) = layout.post_starts.get(self.thread_post_index) {
-            self.thread_scroll = *start as u16;
         }
+    }
+
+    pub fn rebuild_thread_layout(&mut self) {
+        let width = self.thread_body_width.max(40) as usize;
+        let content_width = width.saturating_sub(2);
+        let posts = self.displayed_thread_posts();
+        let blocks = thread_view::build_thread_blocks(
+            &posts,
+            self.thread_post_index,
+            content_width,
+            UiTheme::detect(),
+        );
+        self.thread_layout = thread_view::layout_from_blocks(&blocks);
+    }
+
+    pub fn update_thread_body_width(&mut self, width: u16) {
+        let width = width.max(1);
+        if width == self.thread_body_width {
+            return;
+        }
+        self.thread_body_width = width;
+        self.rebuild_thread_layout();
     }
 }
 
@@ -908,5 +1031,99 @@ mod tests {
         app.load_topics("7", false, 2);
         assert!(app.topics_preserve_selection);
         assert_eq!(app.topic_page, 2);
+    }
+
+    #[test]
+    fn activate_topics_with_empty_list_keeps_focus_on_topics() {
+        let mut app = sample_app(Pane::Topics);
+        app.topics.clear();
+        app.activate();
+        assert_eq!(app.focus, Pane::Topics);
+        assert!(app.thread.is_none());
+    }
+
+    #[tokio::test]
+    async fn request_topic_keeps_pending_focus_after_clear() {
+        let mut app = sample_app(Pane::Topics);
+        app.thread = Some(CliTopicDetailsResult {
+            topic_id: "100".into(),
+            forum_name: "Test".into(),
+            subject: "Old".into(),
+            tags: vec![],
+            author: "a".into(),
+            author_id: "1".into(),
+            replies: 0,
+            post_date: 0,
+            page: 1,
+            total_pages: 1,
+            posts: vec![],
+            meta: Default::default(),
+        });
+        app.request_topic("200");
+        assert!(app.pending_thread_focus);
+        assert!(app.thread.is_none());
+    }
+
+    #[test]
+    fn thread_fetch_failure_keeps_focus_on_topics() {
+        let mut app = sample_app(Pane::Topics);
+        app.thread = None;
+        app.pending_thread_focus = true;
+        app.thread_fetching = true;
+        app.on_task(TaskResult::Thread(
+            app.thread_generation,
+            Err("fetching topic details".into()),
+        ));
+        assert_eq!(app.focus, Pane::Topics);
+        assert!(!app.pending_thread_focus);
+        assert!(app.thread.is_none());
+    }
+
+    #[test]
+    fn thread_fetch_success_moves_focus_when_pending() {
+        let mut app = sample_app(Pane::Topics);
+        app.pending_thread_focus = true;
+        app.on_task(TaskResult::Thread(
+            app.thread_generation,
+            Ok(CliTopicDetailsResult {
+                topic_id: "100".into(),
+                forum_name: "Test".into(),
+                subject: "Topic".into(),
+                tags: vec![],
+                author: "a".into(),
+                author_id: "1".into(),
+                replies: 0,
+                post_date: 0,
+                page: 1,
+                total_pages: 1,
+                posts: vec![],
+                meta: Default::default(),
+            }),
+        ));
+        assert_eq!(app.focus, Pane::Thread);
+        assert!(!app.pending_thread_focus);
+        assert!(app.thread.is_some());
+    }
+
+    #[tokio::test]
+    async fn activate_forums_on_header_selects_first_forum() {
+        let (task_tx, _task_rx) = mpsc::unbounded_channel();
+        let mut app = App::new(task_tx);
+        app.forum_rows = vec![
+            ForumRow::Header("Section".into()),
+            ForumRow::Forum(crate::handlers::forum::ForumInfo {
+                fid: Some("7".into()),
+                stid: None,
+                name: "Test Forum".into(),
+                info: String::new(),
+            }),
+        ];
+        app.forum_index = 0;
+        app.activate();
+        assert_eq!(app.focus, Pane::Topics);
+        assert_eq!(
+            app.selected_forum.as_ref().map(|forum| forum.id.as_str()),
+            Some("7")
+        );
     }
 }

@@ -1,5 +1,7 @@
 mod app;
 mod search;
+mod theme;
+mod thread_view;
 mod ui;
 
 use std::io::stdout;
@@ -34,9 +36,10 @@ pub async fn run(
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    let theme = theme::UiTheme::detect();
 
     let result = loop {
-        terminal.draw(|frame| ui::draw(frame, &app))?;
+        terminal.draw(|frame| ui::draw(frame, &mut app, theme))?;
 
         while let Ok(message) = task_rx.try_recv() {
             app.on_task(message);
