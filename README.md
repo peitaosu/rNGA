@@ -2,6 +2,10 @@
 
 A Rust client for the NGA (艾泽拉斯国家地理) forum.
 
+<p align="center">
+  <img src="NGA.png" alt="NGA TUI"/>
+</p>
+
 ## Crates
 
 | Crate | Role |
